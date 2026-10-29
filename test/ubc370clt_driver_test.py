@@ -48,6 +48,7 @@ class FakeScannerPort:
         self.stored = dict(stored or {})
         self.sent = []
         self.programming = False
+        self.powered_off = False
         self._reply = b""
 
     def reset_input_buffer(self):
@@ -71,10 +72,11 @@ class FakeScannerPort:
             self.programming = True
             return "PRG,OK"
         if f[0] == "JPM":
-            self.programming = False
-            return "JPM,OK"
+            raise AssertionError("JPM,SCN_MODE forces scanning over FM mode")
         if f[0] == "EPG":
-            raise AssertionError("EPG switches the radio off")
+            self.programming = False
+            self.powered_off = True
+            return "EPG,OK"
         if f[0] == "CIN" and self.programming:
             n = int(f[1])
             empty = ["", "00000000", "", "0", "0", "1", "0"]
@@ -138,8 +140,9 @@ class UBC370CLTDriverTest(unittest.TestCase):
         self.assertEqual(two.skip, "S")
         self.assertTrue(radio.get_memory(3).empty)
         self.assertEqual(port.sent[0:2], ["MDL", "PRG"])
-        self.assertEqual(port.sent[-1], "JPM,SCN_MODE")
+        self.assertEqual(port.sent[-1], "EPG")
         self.assertFalse(port.programming)
+        self.assertTrue(port.powered_off)
 
     def test_download_rejects_other_models(self):
         port = FakeScannerPort(model="BCD260DN")
@@ -162,7 +165,7 @@ class UBC370CLTDriverTest(unittest.TestCase):
         writes = [line for line in port.sent if line.count(",") == 8]
         self.assertEqual(writes, ["CIN,2,New  name,04600000,,0,1,0,0"])
         self.assertEqual(port.stored[2][0], "New  name")
-        self.assertEqual(port.sent[-1], "JPM,SCN_MODE")
+        self.assertEqual(port.sent[-1], "EPG")
 
     def test_upload_clears_deleted_channel(self):
         port = FakeScannerPort({
@@ -208,7 +211,7 @@ class UBC370CLTDriverTest(unittest.TestCase):
         radio.set_memory(mem)
         with self.assertRaises(self.errors.RadioError):
             radio.sync_out()
-        self.assertEqual(port.sent[-1], "JPM,SCN_MODE")
+        self.assertEqual(port.sent[-1], "EPG")
 
 
 if __name__ == "__main__":

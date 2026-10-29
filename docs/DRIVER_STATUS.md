@@ -211,7 +211,7 @@ Last updated: 2026-10-29
 - Evidence: BuTel ARC370 static analysis plus live probing on COM5; no ARC370
   traffic capture. No proprietary artifact is bundled.
 - Transport: scanner USB serial port at 115200 8N1, CR-terminated text lines.
-  Not a CHIRP clone protocol, so the driver talks `MDL`, `PRG`, `CIN`, `JPM`
+  Not a CHIRP clone protocol, so the driver talks `MDL`, `PRG`, `CIN`, `EPG`
   directly and keeps the channels in a NewChirp-defined image.
 - Image: 500 records of 32 bytes (100 Hz frequency, tone, delay, lockout,
   unknown flag byte, 16-byte tag) plus a 32-byte trailer used by
@@ -227,8 +227,11 @@ Last updated: 2026-10-29
   old frequency when it cannot receive the new one, so a read-back differing by
   12.5 kHz or more is an error. Deleted channels are written as the empty slot
   because `DCH` is rejected.
-- Safety: the driver never sends `EPG`, which switched the tested radio off.
-  It leaves program mode with `JPM,SCN_MODE`.
+- Exit: the driver ends every session with `EPG`, which powers the scanner
+  off, so it restarts in the mode of the FM/Service/Scanner slider. Only `EPG`
+  and `JPM,SCN_MODE` leave program mode (probed on COM5: a closed port, the
+  slider and `KEY,S,P` do not). `JPM,SCN_MODE` is avoided because it starts
+  scanning even when the slider is on FM, leaving the radio stalled.
 - Hardware validation: none from NewChirp. The protocol was probed with the
   standalone programmer; the driver itself has only offline tests with a fake
   scanner port. Those tests need the pinned CHIRP source and were run here only

@@ -147,15 +147,17 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         prompts.pre_download = (
             "1. Connect the scanner with its USB cable and turn it on.\n"
             "2. Close ARC370 so it releases the serial port.\n"
-            "3. Start the download. The scanner goes into program mode and "
-            "returns to scanning afterwards."
+            "3. Start the download. The scanner switches itself off when "
+            "the download ends; switch it on again and it starts in the "
+            "mode of the slider (FM, Service or Scanner)."
         )
         prompts.pre_upload = (
             "Download the scanner first and keep that image as a backup.\n"
             "1. Connect the scanner with its USB cable and turn it on.\n"
             "2. Close ARC370 so it releases the serial port.\n"
             "3. Start the upload. Only channels that differ from the "
-            "scanner are written, and each one is read back."
+            "scanner are written, and each one is read back. The scanner "
+            "switches itself off when the upload ends; switch it on again."
         )
         return prompts
 
@@ -247,10 +249,12 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         self._exchange("PRG")
 
     def _leave_program_mode(self):
-        # EPG switches the UBC370CLT off. Jumping to scan mode leaves
-        # program mode and the scanner carries on scanning.
+        # Nothing but EPG or JPM,SCN_MODE leaves program mode, and the
+        # slider does not. JPM,SCN_MODE forces scanning even when the slider
+        # is on FM. EPG powers the scanner off, so it starts again in the mode
+        # the slider selects. It may close the port before answering.
         try:
-            self._exchange("JPM,SCN_MODE")
+            self._exchange("EPG")
         except errors.RadioError:
             pass
 
