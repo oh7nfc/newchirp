@@ -292,4 +292,30 @@ void main() {
     expect(sameSlotGroup(model, 501, 530), isTrue);
     expect(sameSlotGroup(model, 1, 500), isTrue);
   });
+
+  test('bands flag a frequency the radio cannot receive', () {
+    const bands = [
+      [25.0, 29.995],
+      [87.3, 107.9],
+      [108.0, 136.9916],
+      [406.0, 439.9937],
+    ];
+    RadioChannel at(int location, double mhz) =>
+        RadioChannel(location: location, name: 'T', frequency: mhz);
+    List<String> issues(RadioChannel channel) => channel.validate(
+      radioModel: unidenUbc370cltModel,
+      bands: bands,
+    );
+
+    expect(issues(at(1, 118.0)), isEmpty);
+    expect(issues(at(2, 136.9916)), isEmpty);
+    expect(issues(at(3, 300.0)).single, contains('outside the receive bands'));
+    expect(issues(at(4, 145.0)).single, contains('outside the receive bands'));
+    // Radios that send no bands keep their current validation.
+    expect(at(5, 300.0).validate(radioModel: 'Yaesu_FTM-150R'), isEmpty);
+    // FM presets 501-530 take 87.3-107.9 MHz only.
+    expect(issues(at(501, 98.0)), isEmpty);
+    expect(issues(at(501, 145.0)).single, contains('FM presets'));
+    expect(issues(at(530, 87.3)), isEmpty);
+  });
 }

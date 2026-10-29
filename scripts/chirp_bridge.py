@@ -450,6 +450,13 @@ def features_json(radio):
         "validCharacters": features.valid_characters,
         "hasTuningStep": features.has_tuning_step,
         "modeReadOnly": bool(getattr(radio, "NEWCHIRP_MODE_READ_ONLY", False)),
+        # Receive bands in Hz, sent only for drivers that ask the app to
+        # enforce them, so other radios keep their current validation.
+        "bands": (
+            [[low, high] for low, high in features.valid_bands]
+            if getattr(radio, "NEWCHIRP_ENFORCE_BANDS", False)
+            else []
+        ),
     }
 
 

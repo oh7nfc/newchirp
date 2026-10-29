@@ -50,10 +50,30 @@ MEM_SIZE = IMAGE_SIZE + TRAILER_SIZE
 # scanner reports as 1.
 RECORD = struct.Struct(">IBBBB16s8x")
 FREQ_UNIT = 100
-FREQ_STEP = 125  # 12.5 kHz in 100 Hz units: the scanner rounds down to this
+FREQ_STEP = 125  # 12.5 kHz in 100 Hz units: fallback tolerance
+# Band ranges from the UBC370CLT manual: (lower Hz, upper Hz, mode, step Hz).
+# The scanner does not receive 174-406 or 512-806 MHz. It picks the mode by
+# itself and rounds a frequency down to the band's step.
+BANDS = (
+    (25_000_000, 29_995_000, "FM", 5_000),
+    (30_000_000, 79_987_500, "FM", 12_500),
+    (80_000_000, 82_990_000, "FM", 10_000),
+    (83_000_000, 87_287_500, "FM", 12_500),
+    (87_300_000, 107_900_000, "WFM", 100_000),
+    (108_000_000, 136_991_600, "AM", 8_330),
+    (137_000_000, 137_995_000, "FM", 5_000),
+    (138_000_000, 157_987_500, "FM", 12_500),
+    (158_000_000, 160_590_000, "FM", 10_000),
+    (160_600_000, 162_587_500, "FM", 12_500),
+    (162_600_000, 173_990_000, "FM", 10_000),
+    (406_000_000, 439_993_700, "FM", 6_250),
+    (440_000_000, 465_995_000, "FM", 5_000),
+    (466_000_000, 469_990_000, "FM", 10_000),
+    (470_000_000, 512_000_000, "FM", 6_250),
+    (806_000_000, 960_000_000, "FM", 12_500),
+)
 # The radio keeps the old FM value outside 87.3-107.9 MHz, answering OK.
 FM_MIN, FM_MAX = 873000, 1079000  # 100 Hz units
-AIR_BAND = (1080000, 1370000)  # 108-137 MHz in 100 Hz units: received as AM
 FM_OLD_CLEARED = 875000  # an earlier clear value: 87.5 MHz
 FM_DASHED_TAG = "-" * 16  # an earlier clear value for the name
 FM_TOLERANCE = 100  # 10 kHz: the radio rounds to its tuning step
@@ -92,10 +112,28 @@ def tone_known(code):
             or DCS_BASE <= code < DCS_BASE + len(DCS_CODES))
 
 
+def _band(freq):
+    """The manual's band that holds `freq` (100 Hz units), or None."""
+    hertz = freq * FREQ_UNIT
+    for band in BANDS:
+        if band[0] <= hertz <= band[1]:
+            return band
+    return None
+
+
 def channel_mode(freq):
-    """The mode the scanner picks by itself: AM on the air band (108-137 MHz),
-    FM everywhere else. The scanner stores no mode, so this is informative."""
-    return "AM" if AIR_BAND[0] <= freq <= AIR_BAND[1] else "FM"
+    """The mode the scanner picks by itself for this band (AM on the air band,
+    WFM on the FM broadcast band, FM elsewhere). The scanner stores no mode,
+    so this is informative."""
+    band = _band(freq)
+    return band[2] if band else "FM"
+
+
+def freq_tolerance(freq):
+    """How far a frequency may differ from what the scanner reads back: its
+    tuning step in this band, in 100 Hz units."""
+    band = _band(freq)
+    return -(-band[3] // FREQ_UNIT) if band else FREQ_STEP
 
 
 def is_fm(number):
@@ -179,6 +217,8 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
     REPLY_TIMEOUT = 1.0
     # The scanner stores no mode per channel; NewChirp shows it read-only.
     NEWCHIRP_MODE_READ_ONLY = True
+    # The scanner skips frequencies outside its bands; NewChirp flags them.
+    NEWCHIRP_ENFORCE_BANDS = True
     _memsize = MEM_SIZE
 
     @classmethod
@@ -251,7 +291,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
             c for c in chirp_common.CHARSET_ASCII if c != ","
         )
         rf.valid_name_length = TAG_LENGTH
-        rf.valid_bands = [(25_000_000, 960_000_000)]
+        rf.valid_bands = [(low, high) for low, high, _, _ in BANDS]
         rf.memory_bounds = (1, TOTAL_COUNT)
         return rf
 
@@ -394,7 +434,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
                 return
             # The scanner rejects DCH. An empty slot is written instead.
             tag, tone, delay, lockout, flag = "", 0, 0, 1, 0
-        elif (abs(now_freq - freq) < FREQ_STEP and now_tag == tag
+        elif (abs(now_freq - freq) < freq_tolerance(freq) and now_tag == tag
                 and now_tone == tone and now_delay == delay
                 and now_lockout == lockout):
             return
@@ -402,7 +442,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         back_freq = self._read_channel(number)[2]
         # The scanner answers OK when it cannot receive a frequency and
         # keeps the old one, and it rounds the rest to its step.
-        if abs(back_freq - freq) >= FREQ_STEP:
+        if abs(back_freq - freq) >= freq_tolerance(freq):
             raise errors.RadioError(
                 "The UBC370CLT did not accept channel %i: it holds %08i."
                 % (number, back_freq)

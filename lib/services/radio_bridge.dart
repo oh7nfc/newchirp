@@ -82,6 +82,7 @@ class RadioCapabilities {
     required this.validCharacters,
     required this.hasTuningStep,
     this.modeReadOnly = false,
+    this.bands = const [],
   });
 
   final List<String> duplexes;
@@ -102,6 +103,10 @@ class RadioCapabilities {
   /// The radio stores no mode per channel, so the mode is shown for
   /// information only.
   final bool modeReadOnly;
+
+  /// Receive bands in MHz as [low, high] pairs. Empty means the app does not
+  /// check frequencies against bands for this radio.
+  final List<List<double>> bands;
 
   bool get uppercaseNames =>
       validCharacters.isNotEmpty &&
@@ -133,6 +138,13 @@ class RadioCapabilities {
       validCharacters: '${json['validCharacters'] ?? ''}',
       hasTuningStep: json['hasTuningStep'] as bool? ?? true,
       modeReadOnly: json['modeReadOnly'] as bool? ?? false,
+      bands: (json['bands'] as List? ?? const [])
+          .map(
+            (band) => (band as List)
+                .map((hertz) => (hertz as num).toDouble() / 1000000)
+                .toList(),
+          )
+          .toList(),
     );
   }
 }

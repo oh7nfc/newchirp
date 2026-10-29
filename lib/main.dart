@@ -1318,6 +1318,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     minimumLocation: _capabilities?.memoryStart,
     maximumLocation: _capabilities?.memoryEnd,
     radioModel: _model,
+    bands: _capabilities?.bands ?? const [],
   );
 
   void _sortChannelsByLocation() {
@@ -8388,6 +8389,7 @@ class _ChannelEditor extends StatelessWidget {
       minimumLocation: capabilities?.memoryStart,
       maximumLocation: capabilities?.memoryEnd,
       radioModel: radioModel,
+      bands: capabilities?.bands ?? const [],
     );
     final midland = showsMidlandChannelNumbers(radioModel);
     final receiveLocked =

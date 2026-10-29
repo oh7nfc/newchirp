@@ -226,6 +226,16 @@ Last updated: 2026-10-29
   87.3 MHz looks the same). Other frequencies are rejected by validation; the
   radio would answer OK and keep the old value. The table labels them FM1-01
   to FM3-10.
+- Bands and mode: receive bands come from the UBC370CLT manual's band table
+  (25-29.995, 30-79.9875, 80-82.99, 83-87.2875, 87.3-107.9 WFM, 108-136.9916
+  AM, 137-137.995, 138-157.9875, 158-160.59, 160.6-162.5875, 162.6-173.99,
+  406-439.9937, 440-465.995, 466-469.99, 470-512, 806-960 MHz; FM unless
+  noted). 174-406 and 512-806 MHz are not received. The scanner picks the mode
+  per band by itself and stores none, so NewChirp shows it read-only. The
+  driver sets `NEWCHIRP_ENFORCE_BANDS` and the app flags a frequency outside
+  the bands (and an FM preset outside 87.3-107.9 MHz) in the editor and before
+  a write. A write is checked against the band's step (5, 6.25, 8.33, 10, 12.5
+  or 100 kHz) when it is read back.
 - Not implemented: trunking systems, the bank scan mask (`SCG`), service
   searches, and bank names (the scanner stores none)
 - Read policy: 500 `CIN,<n>` and 30 `RIN,<n>` reads in program mode

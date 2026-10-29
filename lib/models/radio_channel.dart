@@ -125,6 +125,9 @@ Map<String, String> scanChoices(List<String>? allowed) {
 /// CHIRP id for the experimental Uniden UBC370CLT driver.
 const unidenUbc370cltModel = 'Uniden_UBC370CLT';
 
+bool _withinMhz(double frequency, double low, double high) =>
+    frequency >= low - 0.0000005 && frequency <= high + 0.0000005;
+
 /// The UBC370CLT driver exposes its 30 FM presets as locations 501 to 530:
 /// FM1 is 501-510, FM2 is 511-520 and FM3 is 521-530.
 bool isUnidenFmPreset(String? model, int location) =>
@@ -664,6 +667,7 @@ class RadioChannel {
     int? minimumLocation,
     int? maximumLocation,
     String? radioModel,
+    List<List<double>> bands = const [],
   }) {
     final issues = <String>[];
     if (cleared) return issues;
@@ -693,6 +697,16 @@ class RadioChannel {
     }
     if (frequency <= 0 || frequency > 1300) {
       issues.add('Frequency must be between 0 and 1300 MHz.');
+    } else if (isUnidenFmPreset(radioModel, location)) {
+      if (!_withinMhz(frequency, 87.3, 107.9)) {
+        issues.add('FM presets cover 87.3 to 107.9 MHz.');
+      }
+    } else if (bands.isNotEmpty &&
+        !bands.any((band) => _withinMhz(frequency, band[0], band[1]))) {
+      issues.add(
+        '${frequency.toStringAsFixed(4)} MHz is outside the receive bands '
+        'of this radio.',
+      );
     }
     if (!const ['', '+', '-', 'split', 'off'].contains(duplex)) {
       issues.add('Duplex value is not supported.');

@@ -156,19 +156,35 @@ class UBC370CLTDriverTest(unittest.TestCase):
         self.assertFalse(port.programming)
         self.assertTrue(port.powered_off)
 
-    def test_mode_is_am_on_the_air_band_and_fm_elsewhere(self):
+    def test_mode_follows_the_manual_band_table(self):
         port = FakeScannerPort({
             1: ["Tower", "01180000", "", "0", "1", "0", "0"],
-            2: ["Edge", "01370000", "", "0", "1", "0", "0"],
-            3: ["Police", "04600000", "", "0", "1", "0", "0"],
-            4: ["Below", "01079000", "", "0", "1", "0", "0"],
+            2: ["Top AM", "01369916", "", "0", "1", "0", "0"],
+            3: ["Next FM", "01370000", "", "0", "1", "0", "0"],
+            4: ["Police", "04600000", "", "0", "1", "0", "0"],
+            5: ["Broadcast", "01000000", "", "0", "1", "0", "0"],
         })
         radio = self.radio(port)
         radio.pipe = port
         radio.sync_in()
-        modes = [radio.get_memory(n).mode for n in (1, 2, 3, 4)]
-        self.assertEqual(modes, ["AM", "AM", "FM", "FM"])
+        modes = [radio.get_memory(n).mode for n in (1, 2, 3, 4, 5)]
+        self.assertEqual(modes, ["AM", "AM", "FM", "FM", "WFM"])
         self.assertTrue(radio.NEWCHIRP_MODE_READ_ONLY)
+
+    def test_bands_are_the_manual_ranges_with_gaps(self):
+        bands = radio_bands = self.radio(FakeScannerPort()).get_features()
+        bands = bands.valid_bands
+        self.assertEqual(bands[0], (25_000_000, 29_995_000))
+        self.assertEqual(bands[-1], (806_000_000, 960_000_000))
+        self.assertFalse(any(lo <= 300_000_000 <= hi for lo, hi in bands))
+        self.assertFalse(any(lo <= 600_000_000 <= hi for lo, hi in bands))
+        bridge = sys.modules["newchirp_chirp_bridge_ubc370clt"]
+        caps = bridge.features_json(self.radio(FakeScannerPort()))
+        self.assertEqual(caps["bands"][0], [25_000_000, 29_995_000])
+        self.assertEqual(len(caps["bands"]), 16)
+        # rounded to the band step: 100 kHz on FM broadcast, 12.5 kHz on VHF
+        self.assertEqual(self.drv.freq_tolerance(1_000_000), 1000)
+        self.assertEqual(self.drv.freq_tolerance(1_460_125), 125)
 
     def test_download_rejects_other_models(self):
         port = FakeScannerPort(model="BCD260DN")
