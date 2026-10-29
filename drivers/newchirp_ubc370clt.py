@@ -53,6 +53,7 @@ FREQ_UNIT = 100
 FREQ_STEP = 125  # 12.5 kHz in 100 Hz units: the scanner rounds down to this
 # The radio keeps the old FM value outside 87.3-107.9 MHz, answering OK.
 FM_MIN, FM_MAX = 873000, 1079000  # 100 Hz units
+AIR_BAND = (1080000, 1370000)  # 108-137 MHz in 100 Hz units: received as AM
 FM_OLD_CLEARED = 875000  # an earlier clear value: 87.5 MHz
 FM_DASHED_TAG = "-" * 16  # an earlier clear value for the name
 FM_TOLERANCE = 100  # 10 kHz: the radio rounds to its tuning step
@@ -89,6 +90,12 @@ def tone_known(code):
     """True for a tone number the scanner displays (CTCSS or DCS)."""
     return (CTCSS_BASE <= code < CTCSS_BASE + len(CTCSS_TONES)
             or DCS_BASE <= code < DCS_BASE + len(DCS_CODES))
+
+
+def channel_mode(freq):
+    """The mode the scanner picks by itself: AM on the air band (108-137 MHz),
+    FM everywhere else. The scanner stores no mode, so this is informative."""
+    return "AM" if AIR_BAND[0] <= freq <= AIR_BAND[1] else "FM"
 
 
 def is_fm(number):
@@ -170,6 +177,8 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
     WANTS_DTR = True
     WANTS_RTS = True
     REPLY_TIMEOUT = 1.0
+    # The scanner stores no mode per channel; NewChirp shows it read-only.
+    NEWCHIRP_MODE_READ_ONLY = True
     _memsize = MEM_SIZE
 
     @classmethod
@@ -231,7 +240,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         rf.has_comment = False
         rf.has_sub_devices = False
         rf.can_delete = True
-        rf.valid_modes = ["FM", "WFM"]
+        rf.valid_modes = ["FM", "AM", "WFM"]
         rf.valid_duplexes = [""]
         rf.valid_tmodes = ["", "TSQL", "DTCS"]
         rf.valid_tones = list(CTCSS_FLOATS)
@@ -467,7 +476,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
 
         mem.freq = freq * FREQ_UNIT
         mem.name = tag
-        mem.mode = "WFM" if is_fm(number) else "FM"
+        mem.mode = "WFM" if is_fm(number) else channel_mode(freq)
         mem.duplex = ""
         mem.offset = 0
         if is_fm(number):

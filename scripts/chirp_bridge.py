@@ -449,6 +449,7 @@ def features_json(radio):
         "nameLength": features.valid_name_length,
         "validCharacters": features.valid_characters,
         "hasTuningStep": features.has_tuning_step,
+        "modeReadOnly": bool(getattr(radio, "NEWCHIRP_MODE_READ_ONLY", False)),
     }
 
 

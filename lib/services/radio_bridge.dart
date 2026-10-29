@@ -81,6 +81,7 @@ class RadioCapabilities {
     required this.nameLength,
     required this.validCharacters,
     required this.hasTuningStep,
+    this.modeReadOnly = false,
   });
 
   final List<String> duplexes;
@@ -97,6 +98,10 @@ class RadioCapabilities {
   final int nameLength;
   final String validCharacters;
   final bool hasTuningStep;
+
+  /// The radio stores no mode per channel, so the mode is shown for
+  /// information only.
+  final bool modeReadOnly;
 
   bool get uppercaseNames =>
       validCharacters.isNotEmpty &&
@@ -127,6 +132,7 @@ class RadioCapabilities {
       nameLength: (json['nameLength'] as num?)?.toInt() ?? 16,
       validCharacters: '${json['validCharacters'] ?? ''}',
       hasTuningStep: json['hasTuningStep'] as bool? ?? true,
+      modeReadOnly: json['modeReadOnly'] as bool? ?? false,
     );
   }
 }

@@ -7896,8 +7896,11 @@ class _ChannelTableState extends State<_ChannelTable> {
         'MODE',
         68,
         (channel) => channel.mode,
-        help:
-            'Voice modulation: FM, narrowband FM, or AM depending on the radio.',
+        help: widget.capabilities?.modeReadOnly ?? false
+            ? 'Shown for information only: this radio stores no mode per '
+                  'channel.'
+            : 'Voice modulation: FM, narrowband FM, or AM depending on the '
+                  'radio.',
       ),
       if (showStep)
         _ChannelColumn(
@@ -8765,6 +8768,11 @@ class _ChannelEditor extends StatelessWidget {
                       child: _ChoiceField(
                         key: narrowLow ? const ValueKey('gm32-mode-nfm') : null,
                         label: 'Mode',
+                        enabled: !(capabilities?.modeReadOnly ?? false),
+                        documentation: (capabilities?.modeReadOnly ?? false)
+                            ? 'This radio stores no mode per channel. The mode '
+                                  'is shown for information only.'
+                            : null,
                         value: channel.mode,
                         choices: narrowLow
                             ? const {'NFM': 'NFM'}

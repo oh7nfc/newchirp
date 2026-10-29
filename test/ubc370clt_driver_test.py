@@ -156,6 +156,20 @@ class UBC370CLTDriverTest(unittest.TestCase):
         self.assertFalse(port.programming)
         self.assertTrue(port.powered_off)
 
+    def test_mode_is_am_on_the_air_band_and_fm_elsewhere(self):
+        port = FakeScannerPort({
+            1: ["Tower", "01180000", "", "0", "1", "0", "0"],
+            2: ["Edge", "01370000", "", "0", "1", "0", "0"],
+            3: ["Police", "04600000", "", "0", "1", "0", "0"],
+            4: ["Below", "01079000", "", "0", "1", "0", "0"],
+        })
+        radio = self.radio(port)
+        radio.pipe = port
+        radio.sync_in()
+        modes = [radio.get_memory(n).mode for n in (1, 2, 3, 4)]
+        self.assertEqual(modes, ["AM", "AM", "FM", "FM"])
+        self.assertTrue(radio.NEWCHIRP_MODE_READ_ONLY)
+
     def test_download_rejects_other_models(self):
         port = FakeScannerPort(model="BCD260DN")
         with self.assertRaises(self.errors.RadioError):
