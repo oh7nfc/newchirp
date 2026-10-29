@@ -3523,6 +3523,62 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     return confirmed == true;
   }
 
+  Future<void> _showAttentionList() async {
+    final problems = [
+      for (final channel in _activeChannels)
+        if (_channelIssues(channel).isNotEmpty)
+          (channel: channel, issues: _channelIssues(channel)),
+    ];
+    if (problems.isEmpty || !mounted) return;
+    final location = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          problems.length == 1
+              ? '1 channel needs attention'
+              : '${problems.length} channels need attention',
+        ),
+        content: SizedBox(
+          width: 480,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final problem in problems)
+                ListTile(
+                  key: ValueKey('attention-${problem.channel.location}'),
+                  leading: const Icon(Icons.error_outline),
+                  title: Text(
+                    channelNumberLabel(_model, problem.channel.location) +
+                        (problem.channel.name.isEmpty
+                            ? ''
+                            : '  ${problem.channel.name}'),
+                  ),
+                  subtitle: Text(problem.issues.join('\n')),
+                  onTap: () =>
+                      Navigator.of(context).pop(problem.channel.location),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (location == null || !mounted) return;
+    final index = _channels.indexWhere(
+      (channel) => channel.location == location,
+    );
+    if (index >= 0) setState(() => _selected = index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _channelTableKey.currentState?.revealSelectedChannel();
+    });
+    unawaited(_showChannelEditorAtLocation(location));
+  }
+
   Widget _buildLibrary() {
     final visible = _channelTableRows();
     final invalid = _activeChannels
@@ -3557,6 +3613,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                 icon: invalid == 0
                     ? Icons.check_circle_outline
                     : Icons.error_outline,
+                onTap: invalid == 0
+                    ? null
+                    : () => unawaited(_showAttentionList()),
+                tooltip: 'Show which channels need attention',
               ),
             ],
           ),
@@ -7549,14 +7609,24 @@ class _WelcomeAction extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, required this.icon});
+  const _Metric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.onTap,
+    this.tooltip,
+  });
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
+  final String? tooltip;
   @override
   Widget build(BuildContext context) => Expanded(
     child: Card(
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: _tappable(
+        Padding(
         padding: const EdgeInsets.all(15),
         child: Row(
           children: [
@@ -7593,8 +7663,15 @@ class _Metric extends StatelessWidget {
           ],
         ),
       ),
+      ),
     ),
   );
+
+  Widget _tappable(Widget child) {
+    if (onTap == null) return child;
+    final tapped = InkWell(onTap: onTap, child: child);
+    return tooltip == null ? tapped : Tooltip(message: tooltip!, child: tapped);
+  }
 }
 
 /// Cell texts that mean a channel has nothing set in a column.
