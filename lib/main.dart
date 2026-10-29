@@ -1303,11 +1303,16 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     });
   }
 
-  int? _nextChannelLocation() => RadioChannel.nextAvailableLocation(
-    _channels,
-    minimum: _capabilities?.memoryStart ?? 1,
-    maximum: _capabilities?.memoryEnd,
-  );
+  int? _nextChannelLocation() {
+    final ordinaryEnd = ordinaryChannelEnd(_model);
+    return RadioChannel.nextAvailableLocation(
+      ordinaryEnd == null
+          ? _channels
+          : _channels.where((channel) => channel.location <= ordinaryEnd),
+      minimum: _capabilities?.memoryStart ?? 1,
+      maximum: ordinaryEnd ?? _capabilities?.memoryEnd,
+    );
+  }
 
   List<String> _channelIssues(RadioChannel channel) => channel.validate(
     minimumLocation: _capabilities?.memoryStart,
@@ -1319,6 +1324,20 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     _channels.sort((left, right) => left.location.compareTo(right.location));
   }
 
+  void _showFmGroupMoveNotice() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'FM presets (501 to 530) and channels 1 to 500 cannot trade '
+            'places. Copy the frequency and name instead.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   void _moveChannel(int fromIndex, int toIndex) {
     if (_query.isNotEmpty ||
         fromIndex == toIndex ||
@@ -1327,6 +1346,14 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         fromIndex >= _channels.length ||
         toIndex >= _channels.length ||
         _channels[fromIndex].cleared) {
+      return;
+    }
+    if (!sameSlotGroup(
+      _model,
+      _channels[fromIndex].location,
+      _channels[toIndex].location,
+    )) {
+      _showFmGroupMoveNotice();
       return;
     }
 
@@ -1379,6 +1406,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     final moved = _channels[fromIndex];
     final previousLocation = moved.location;
     if (previousLocation == targetLocation) return;
+    if (!sameSlotGroup(_model, previousLocation, targetLocation)) {
+      _showFmGroupMoveNotice();
+      return;
+    }
 
     _recordHistory();
     setState(() {
@@ -1426,22 +1457,24 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         );
       return;
     }
-    final maximum = _capabilities?.memoryEnd;
+    final maximum = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
     if (maximum != null &&
-        _channels.any((channel) => channel.location >= maximum)) {
+        _channels.any((channel) => channel.location == maximum)) {
       _showNoEmptyChannelSlot();
       return;
     }
 
+    bool shifts(int slot) =>
+        slot >= location && (maximum == null || slot <= maximum);
     final selectedChannel = _current;
     _recordHistory();
     setState(() {
       for (final channel in _channels) {
-        if (channel.location >= location) channel.location += 1;
+        if (shifts(channel.location)) channel.location += 1;
       }
       final shiftedClears =
           _clearedLocations
-              .map((cleared) => cleared >= location ? cleared + 1 : cleared)
+              .map((cleared) => shifts(cleared) ? cleared + 1 : cleared)
               .toSet()
             ..add(location);
       _clearedLocations
@@ -1481,17 +1514,23 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       return;
     }
 
+    final groupEnd = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
+    bool shifts(int slot) =>
+        slot > location && (groupEnd == null || slot <= groupEnd);
     final selectedChannel = _current;
     _recordHistory();
     setState(() {
       _channels.removeWhere((channel) => channel.location == location);
       for (final channel in _channels) {
-        if (channel.location > location) channel.location -= 1;
+        if (shifts(channel.location)) channel.location -= 1;
       }
       final shiftedClears = <int>{};
       for (final cleared in _clearedLocations) {
-        if (cleared < location) shiftedClears.add(cleared);
-        if (cleared > location) shiftedClears.add(cleared - 1);
+        if (cleared < location || (cleared > location && !shifts(cleared))) {
+          shiftedClears.add(cleared);
+        } else if (cleared > location) {
+          shiftedClears.add(cleared - 1);
+        }
       }
       _clearedLocations
         ..clear()
@@ -1927,8 +1966,11 @@ class _NewChirpHomeState extends State<NewChirpHome> {
 
   int? _endInsertionLocation() {
     final minimum = _capabilities?.memoryStart ?? 1;
-    final maximum = _capabilities?.memoryEnd;
-    final active = _activeChannels;
+    final ordinaryEnd = ordinaryChannelEnd(_model);
+    final maximum = ordinaryEnd ?? _capabilities?.memoryEnd;
+    final active = ordinaryEnd == null
+        ? _activeChannels
+        : _activeChannels.where((channel) => channel.location <= ordinaryEnd);
     final location = active.isEmpty
         ? minimum
         : active
@@ -2002,8 +2044,11 @@ class _NewChirpHomeState extends State<NewChirpHome> {
   }
 
   void _insertChannelAt(int location) {
-    final minimum = _capabilities?.memoryStart;
-    final maximum = _capabilities?.memoryEnd;
+    final memoryStart = _capabilities?.memoryStart;
+    final minimum = memoryStart == null
+        ? null
+        : slotGroupStart(_model, location, memoryStart);
+    final maximum = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
     if (maximum != null && location > maximum) {
       _showNoEmptyChannelSlot();
       return;
@@ -2017,7 +2062,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     );
     if (occupied &&
         maximum != null &&
-        _channels.any((channel) => channel.location >= maximum)) {
+        _channels.any((channel) => channel.location == maximum)) {
       _showNoEmptyChannelSlot();
       return;
     }
@@ -2026,11 +2071,13 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     _recordHistory();
     setState(() {
       if (occupied) {
+        bool shifts(int slot) =>
+            slot >= location && (maximum == null || slot <= maximum);
         for (final existing in _channels) {
-          if (existing.location >= location) existing.location += 1;
+          if (shifts(existing.location)) existing.location += 1;
         }
         final shiftedClears = _clearedLocations
-            .map((cleared) => cleared >= location ? cleared + 1 : cleared)
+            .map((cleared) => shifts(cleared) ? cleared + 1 : cleared)
             .toSet();
         _clearedLocations
           ..clear()

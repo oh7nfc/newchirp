@@ -277,4 +277,19 @@ void main() {
     expect(channelNumberLabel(unidenUbc370cltModel, 530), 'FM3-10');
     expect(channelNumberLabel('Yaesu_FTM-150R', 505), '505');
   });
+
+  test('UBC370CLT channels and FM presets are separate slot groups', () {
+    const model = unidenUbc370cltModel;
+    expect(ordinaryChannelEnd(model), 500);
+    expect(ordinaryChannelEnd('Yaesu_FTM-150R'), isNull);
+    expect(slotGroupEnd(model, 10, 530), 500);
+    expect(slotGroupEnd(model, 500, 530), 500);
+    expect(slotGroupEnd(model, 501, 530), 530);
+    expect(slotGroupStart(model, 505, 1), 501);
+    expect(slotGroupStart(model, 5, 1), 1);
+    expect(slotGroupEnd('Yaesu_FTM-150R', 10, 999), 999);
+    expect(sameSlotGroup(model, 500, 501), isFalse);
+    expect(sameSlotGroup(model, 501, 530), isTrue);
+    expect(sameSlotGroup(model, 1, 500), isTrue);
+  });
 }

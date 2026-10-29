@@ -130,6 +130,26 @@ const unidenUbc370cltModel = 'Uniden_UBC370CLT';
 bool isUnidenFmPreset(String? model, int location) =>
     model == unidenUbc370cltModel && location >= 501 && location <= 530;
 
+/// Last location of the ordinary channels when later locations are a separate
+/// group (the UBC370CLT's FM presets). Null when the radio has one group.
+int? ordinaryChannelEnd(String? model) =>
+    model == unidenUbc370cltModel ? 500 : null;
+
+/// First location of the slot group that holds [location].
+int slotGroupStart(String? model, int location, int memoryStart) =>
+    isUnidenFmPreset(model, location) ? 501 : memoryStart;
+
+/// Last location of the slot group that holds [location]. Inserting or
+/// removing a slot shifts channels only up to here, so channels and FM
+/// presets never push into each other.
+int? slotGroupEnd(String? model, int location, int? memoryEnd) {
+  final ordinary = ordinaryChannelEnd(model);
+  return ordinary != null && location <= ordinary ? ordinary : memoryEnd;
+}
+
+bool sameSlotGroup(String? model, int first, int second) =>
+    isUnidenFmPreset(model, first) == isUnidenFmPreset(model, second);
+
 /// CHIRP id for the experimental Midland MXT295 driver.
 const midlandMxt295Model = 'Midland_MXT295';
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ffi' show Abi;
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 
 import '../models/radio_channel.dart';
@@ -40,11 +41,12 @@ class RadioBridgeException implements Exception {
   String toString() => message;
 }
 
-bool _isBenignBridgeStderrLine(String line) {
-  final trimmed = line.trim();
-  return trimmed.startsWith("Replacing existing driver id '") ||
-      trimmed.startsWith('Replacing existing driver id "');
-}
+/// CHIRP logs this whenever a NewChirp driver deliberately replaces a bundled
+/// one (for example the TS-2000). It is not an error. CHIRP quotes the id as
+/// `id' with a backtick, so match the prefix, not the quote style.
+@visibleForTesting
+bool isBenignBridgeStderrLine(String line) =>
+    line.trim().startsWith('Replacing existing driver id ');
 
 class RadioInstructions {
   const RadioInstructions({
@@ -777,7 +779,7 @@ class RadioBridge {
         .transform(const LineSplitter())
         .forEach((line) {
           if (!line.startsWith(_progressPrefix)) {
-            if (_isBenignBridgeStderrLine(line)) return;
+            if (isBenignBridgeStderrLine(line)) return;
             stderrLines.add(line);
             return;
           }
