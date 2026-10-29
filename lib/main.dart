@@ -1956,12 +1956,23 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     final midland = showsMidlandChannelNumbers(_model);
     final gm32 = isBaofengGm32(_model);
     final specializedReceive = midland || gm32;
+    if (isUnidenFmPreset(_model, location)) {
+      // An FM preset starts inside 87.3-107.9 MHz, the only range it takes.
+      return RadioChannel(
+        location: location,
+        name: 'NEW ${channelNumberLabel(_model, location)}',
+        frequency: 87.5,
+        duplex: '',
+        offset: 0,
+      );
+    }
+    final receiveOnly = specializedReceive || _model == unidenUbc370cltModel;
     return RadioChannel(
       location: location,
       name: 'NEW $location',
       frequency: specializedReceive ? 0 : 146.52,
       duplex: '',
-      offset: specializedReceive ? 0 : 0.6,
+      offset: receiveOnly ? 0 : 0.6,
     );
   }
 
@@ -8583,9 +8594,16 @@ class _ChannelEditor extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: showsMidlandChannelNumbers(radioModel)
+                      child:
+                          showsMidlandChannelNumbers(radioModel) ||
+                              isUnidenFmPreset(radioModel, channel.location)
                           ? _TextField(
-                              label: 'Channel',
+                              label: isUnidenFmPreset(
+                                    radioModel,
+                                    channel.location,
+                                  )
+                                  ? 'FM preset'
+                                  : 'Channel',
                               value: channelNumberLabel(
                                 radioModel,
                                 channel.location,
