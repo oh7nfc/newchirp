@@ -14,6 +14,7 @@ import 'package:window_manager/window_manager.dart';
 import 'models/channel_image_baseline.dart';
 import 'models/gm32_channel.dart';
 import 'models/radio_channel.dart';
+import 'models/radio_reference.dart';
 import 'models/repeater_search.dart';
 import 'services/chirp_csv.dart';
 import 'services/column_layout_store.dart';
@@ -31,6 +32,7 @@ import 'widgets/channel_library_image_bar.dart';
 import 'widgets/file_save_warning_dialog.dart';
 import 'widgets/error_report_dialog.dart';
 import 'widgets/radio_model_picker.dart';
+import 'widgets/reference_page.dart';
 
 const _menuChannel = MethodChannel('newchirp/menu');
 
@@ -413,6 +415,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
   final Map<String, double> _columnWidths = {};
   bool _showEmptySlots = false;
   bool _hideUnusedColumns = false;
+  int _referenceTab = 0;
   bool _columnLayoutTouched = false;
   Future<void>? _fileSaveWarningLoad;
   bool _hideFileSaveWarning = false;
@@ -2832,17 +2835,23 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                             minimalMode: _page == 2 || _page == 3 || _page == 4,
                             minimalTitle: switch (_page) {
                               2 => 'About & licenses',
-                              3 => 'GMRS & FRS Frequency Reference',
+                              3 =>
+                                _referenceSection == null
+                                    ? 'GMRS & FRS Frequency Reference'
+                                    : _referenceSection!.title,
                               _ => 'Radio settings',
                             },
                             minimalSubtitle: switch (_page) {
                               2 =>
                                 'Application information and open-source licenses',
-                              3 => 'Part 95 FRS/GMRS channel plan',
+                              3 =>
+                                _referenceSection == null
+                                    ? 'Part 95 FRS/GMRS channel plan'
+                                    : _referenceSection!.subtitle,
                               _ =>
                                 'Radio-wide options exposed by the selected driver',
                             },
-                            showPrint: _page == 3,
+                            showPrint: _page == 3 && _referenceTab == 0,
                             onPrint: _printFrequencyReference,
                           ),
                           Expanded(
@@ -4140,7 +4149,50 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     }
   }
 
+  /// The tab section of the reference page, or null on the GMRS & FRS tab.
+  ReferenceSection? get _referenceSection =>
+      _referenceTab >= 1 && _referenceTab <= referenceSections.length
+      ? referenceSections[_referenceTab - 1]
+      : null;
+
   Widget _buildFrequencyReference() {
+    final section = _referenceSection;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<int>(
+              key: const ValueKey('reference-tabs'),
+              showSelectedIcon: false,
+              segments: [
+                const ButtonSegment(value: 0, label: Text('GMRS & FRS')),
+                for (var i = 0; i < referenceSections.length; i++)
+                  ButtonSegment(
+                    value: i + 1,
+                    label: Text(referenceSections[i].label),
+                  ),
+              ],
+              selected: {_referenceTab},
+              onSelectionChanged: (selection) =>
+                  setState(() => _referenceTab = selection.first),
+            ),
+          ),
+        ),
+        Expanded(
+          child: section == null
+              ? _buildGmrsFrsReference()
+              : ReferencePage(
+                  key: ValueKey('reference-page-${section.id}'),
+                  section: section,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGmrsFrsReference() {
     const green = Color(0xFF1F7455);
     const ink = Color(0xFF15211D);
     const muted = Color(0xFF56615B);
