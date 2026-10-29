@@ -42,10 +42,11 @@ class FakeScannerPort:
     standalone programmer: CR-terminated commands, CIN in program mode only,
     frequencies rounded down to 12.5 kHz, unreceivable ones kept as before."""
 
-    def __init__(self, stored=None, model="UBC370CLT"):
+    def __init__(self, stored=None, model="UBC370CLT", fm=None):
         self.timeout = 1.0
         self.model = model
         self.stored = dict(stored or {})
+        self.fm = dict(fm or {})
         self.sent = []
         self.programming = False
         self.powered_off = False
@@ -91,6 +92,17 @@ class FakeScannerPort:
                 f[6], f[7], f[8],
             ]
             return "CIN,OK"
+        if f[0] == "RIN" and self.programming:
+            n = int(f[1])
+            if len(f) == 2:
+                return "RIN,%i,%s,%s" % (n, *self.fm.get(n, ("", "00000000")))
+            freq = int(f[3])
+            if not 873000 <= freq <= 1079000:
+                # Answered OK but not stored; this includes 0, so a preset
+                # cannot be emptied.
+                freq = int(self.fm.get(n, ("", "0"))[1])
+            self.fm[n] = (f[2][:16], "%08i" % freq)
+            return "RIN,OK"
         return "ERR"
 
 
@@ -197,6 +209,79 @@ class UBC370CLTDriverTest(unittest.TestCase):
         self.assertEqual(
             port.stored[5], ["PMR 1", "04336250", "", "74", "1", "0", "0"]
         )
+
+    def test_download_reads_fm_presets_as_locations_501_to_530(self):
+        port = FakeScannerPort(fm={
+            1: ("Yle Radio Suomi", "00965000"),
+            12: ("Radio Nova", "01006000"),
+            30: ("", "00873000"),  # the cleared look: reads as empty
+        })
+        radio = self.radio(port)
+        radio.pipe = port
+        radio.sync_in()
+        one = radio.get_memory(501)
+        self.assertEqual((one.freq, one.name), (96_500_000, "Yle Radio Suomi"))
+        self.assertEqual(one.mode, "WFM")
+        self.assertEqual(radio.get_memory(512).freq, 100_600_000)
+        self.assertTrue(radio.get_memory(530).empty)
+        self.assertTrue(radio.get_memory(502).empty)
+        self.assertEqual(self.drv.fm_label(512), "FM2-02")
+
+    def test_fm_edit_is_written_and_clear_uses_lowest_frequency(self):
+        from chirp import chirp_common
+
+        port = FakeScannerPort(fm={2: ("Old", "00905000")})
+        radio = self.radio(port)
+        radio.pipe = port
+        radio.sync_in()
+        mem = chirp_common.Memory()
+        mem.number = 521
+        mem.freq = 93_900_000
+        mem.name = "Rock"
+        mem.mode = "WFM"
+        radio.set_memory(mem)
+        radio.erase_memory(502)
+        radio.sync_out()
+        self.assertEqual(port.fm[21], ("Rock", "00939000"))
+        self.assertEqual(port.fm[2], ("", "00873000"))
+        self.assertIn("RIN,21,Rock,00939000", port.sent)
+        self.assertIn("RIN,2,,00873000", port.sent)
+        self.assertEqual(port.sent[-1], "EPG")
+
+    def test_fm_preset_outside_the_band_is_rejected(self):
+        from chirp import chirp_common
+
+        radio = self.radio(FakeScannerPort())
+        mem = chirp_common.Memory()
+        mem.number = 505
+        mem.freq = 145_000_000
+        mem.mode = "WFM"
+        errors = [
+            m for m in radio.validate_memory(mem)
+            if isinstance(m, chirp_common.ValidationError)
+        ]
+        self.assertEqual(len(errors), 1)
+        mem.freq = 98_000_000
+        self.assertEqual(
+            [m for m in radio.validate_memory(mem)
+             if isinstance(m, chirp_common.ValidationError)],
+            [],
+        )
+
+    def test_fm_preset_the_radio_ignores_is_an_error(self):
+        from chirp import chirp_common
+
+        port = FakeScannerPort()
+        radio = self.radio(port)
+        radio.pipe = port
+        mem = chirp_common.Memory()
+        mem.number = 501
+        mem.freq = 145_000_000  # skips validation, as a hand-edited image
+        mem.mode = "WFM"
+        radio.set_memory(mem)
+        with self.assertRaises(self.errors.RadioError):
+            radio.sync_out()
+        self.assertEqual(port.sent[-1], "EPG")
 
     def test_unreceivable_frequency_is_an_error(self):
         from chirp import chirp_common

@@ -122,6 +122,14 @@ Map<String, String> scanChoices(List<String>? allowed) {
   return {for (final value in values) value: scanLabel(value)};
 }
 
+/// CHIRP id for the experimental Uniden UBC370CLT driver.
+const unidenUbc370cltModel = 'Uniden_UBC370CLT';
+
+/// The UBC370CLT driver exposes its 30 FM presets as locations 501 to 530:
+/// FM1 is 501-510, FM2 is 511-520 and FM3 is 521-530.
+bool isUnidenFmPreset(String? model, int location) =>
+    model == unidenUbc370cltModel && location >= 501 && location <= 530;
+
 /// CHIRP id for the experimental Midland MXT295 driver.
 const midlandMxt295Model = 'Midland_MXT295';
 
@@ -134,6 +142,10 @@ bool showsMidlandChannelNumbers(String? model) => model == midlandMxt295Model;
 /// matches the Midland screen: channels 1-99, with RPTR 15-22 between them.
 /// Other radios show the slot number unchanged.
 String channelNumberLabel(String? model, int location) {
+  if (isUnidenFmPreset(model, location)) {
+    final index = location - 501;
+    return 'FM${index ~/ 10 + 1}-${(index % 10 + 1).toString().padLeft(2, '0')}';
+  }
   if (!showsMidlandChannelNumbers(model)) return '$location';
   if (location < 1 || location > 107) return '$location';
   if (location <= 15) return '$location';

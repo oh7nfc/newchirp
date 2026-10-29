@@ -268,4 +268,13 @@ void main() {
       isEmpty,
     );
   });
+
+  test('UBC370CLT FM presets are labeled by bank', () {
+    expect(channelNumberLabel(unidenUbc370cltModel, 500), '500');
+    expect(channelNumberLabel(unidenUbc370cltModel, 501), 'FM1-01');
+    expect(channelNumberLabel(unidenUbc370cltModel, 510), 'FM1-10');
+    expect(channelNumberLabel(unidenUbc370cltModel, 511), 'FM2-01');
+    expect(channelNumberLabel(unidenUbc370cltModel, 530), 'FM3-10');
+    expect(channelNumberLabel('Yaesu_FTM-150R', 505), '505');
+  });
 }

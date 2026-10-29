@@ -15,7 +15,12 @@ unit (firmware 1.01.06):
 
 NewChirp keeps the 500 channels in a fixed-record image of its own so CHIRP
 can load, edit, save, and compare them like any other radio. Trunking
-systems, FM presets, and the bank scan mask are not exposed.
+systems and the bank scan mask are not exposed.
+
+The 30 FM broadcast presets (three banks of ten, `RIN` commands) appear as
+locations 501 to 530: FM1 is 501-510, FM2 is 511-520, FM3 is 521-530. The
+radio cannot empty a preset, so an empty one is written as 87.3 MHz with no
+name and reads back as empty.
 """
 
 import struct
@@ -31,9 +36,12 @@ from chirp.settings import (
 
 MODEL_REPLY = "MDL,UBC370CLT"
 CHANNEL_COUNT = 500
+FM_COUNT = 30
+FM_PER_BANK = 10
+TOTAL_COUNT = CHANNEL_COUNT + FM_COUNT
 RECORD_SIZE = 32
 TAG_LENGTH = 16
-IMAGE_SIZE = CHANNEL_COUNT * RECORD_SIZE
+IMAGE_SIZE = TOTAL_COUNT * RECORD_SIZE
 TRAILER = b"NewChirp UBC370CLT"
 TRAILER_SIZE = 32
 MEM_SIZE = IMAGE_SIZE + TRAILER_SIZE
@@ -43,6 +51,11 @@ MEM_SIZE = IMAGE_SIZE + TRAILER_SIZE
 RECORD = struct.Struct(">IBBBB16s8x")
 FREQ_UNIT = 100
 FREQ_STEP = 125  # 12.5 kHz in 100 Hz units: the scanner rounds down to this
+# The radio keeps the old FM value outside 87.3-107.9 MHz, answering OK.
+FM_MIN, FM_MAX = 873000, 1079000  # 100 Hz units
+FM_OLD_CLEARED = 875000  # an earlier clear value: 87.5 MHz
+FM_DASHED_TAG = "-" * 16  # an earlier clear value for the name
+FM_TOLERANCE = 100  # 10 kHz: the radio rounds to its tuning step
 
 TERMINATOR = b"\r"
 ERROR_REPLIES = ("ERR", "NG", "FER", "ORER")
@@ -78,9 +91,40 @@ def tone_known(code):
             or DCS_BASE <= code < DCS_BASE + len(DCS_CODES))
 
 
+def is_fm(number):
+    return CHANNEL_COUNT < number <= TOTAL_COUNT
+
+
+def fm_label(number):
+    """'FM2-03' for location 513."""
+    index = number - CHANNEL_COUNT - 1
+    return "FM%i-%02i" % (index // FM_PER_BANK + 1, index % FM_PER_BANK + 1)
+
+
+def fm_cleared(freq, tag):
+    """The look of an emptied preset: the radio cannot empty one, so a cleared
+    preset is the lowest frequency with no name (earlier clears also read)."""
+    return freq in (FM_MIN, FM_OLD_CLEARED) and tag in ("", FM_DASHED_TAG)
+
+
+def rin_line(index, tag, freq):
+    return "RIN,%i,%s,%08i" % (index, tag, freq)
+
+
+def parse_rin(line):
+    """Decode a RIN reply into (index, tag, freq)."""
+    fields = line.strip().split(",")
+    if fields[0] != "RIN" or len(fields) != 4:
+        raise errors.RadioError("Unexpected FM preset reply: %r" % line)
+    try:
+        return int(fields[1]), fields[2], int(fields[3])
+    except ValueError:
+        raise errors.RadioError("Unreadable FM preset reply: %r" % line)
+
+
 def blank_image():
     empty = RECORD.pack(0, 0, 0, 1, 0, b"")
-    return empty * CHANNEL_COUNT + TRAILER.ljust(TRAILER_SIZE, b"\x00")
+    return empty * TOTAL_COUNT + TRAILER.ljust(TRAILER_SIZE, b"\x00")
 
 
 def encode_tag(text):
@@ -134,15 +178,17 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         prompts.experimental = (
             "The Uniden UBC370CLT driver is experimental. It reads and "
             "writes the 500 conventional channels (frequency, tag, CTCSS/DCS, "
-            "delay, and lockout) over the scanner's USB serial port. "
-            "Trunking systems, FM presets, and the bank scan mask are left "
-            "untouched. Every write is read back from the scanner."
+            "delay, and lockout) and the 30 FM presets (locations 501 to 530) "
+            "over the scanner's USB serial port. Trunking systems and the "
+            "bank scan mask are left untouched. Every write is read back "
+            "from the scanner."
         )
         prompts.info = (
             "Connect the UBC370CLT with its USB cable and turn it on. The "
             "interface uses 115200 baud, 8 data bits, no parity, and one stop "
             "bit. The scanner has 10 banks of 50 channels: channel 1 to 50 "
-            "is bank 1, 51 to 100 is bank 2, and so on."
+            "is bank 1, 51 to 100 is bank 2, and so on. FM1 is 501 to 510, FM2 "
+            "is 511 to 520, and FM3 is 521 to 530 (87.3 to 107.9 MHz)."
         )
         prompts.pre_download = (
             "1. Connect the scanner with its USB cable and turn it on.\n"
@@ -185,7 +231,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         rf.has_comment = False
         rf.has_sub_devices = False
         rf.can_delete = True
-        rf.valid_modes = ["FM"]
+        rf.valid_modes = ["FM", "WFM"]
         rf.valid_duplexes = [""]
         rf.valid_tmodes = ["", "TSQL", "DTCS"]
         rf.valid_tones = list(CTCSS_FLOATS)
@@ -197,7 +243,7 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         )
         rf.valid_name_length = TAG_LENGTH
         rf.valid_bands = [(25_000_000, 960_000_000)]
-        rf.memory_bounds = (1, CHANNEL_COUNT)
+        rf.memory_bounds = (1, TOTAL_COUNT)
         return rf
 
     # -- serial -----------------------------------------------------------
@@ -286,7 +332,16 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
                         1 if delay else 0, 1 if lockout else 0,
                         1 if flag else 0, tag.encode("ascii", "replace"),
                     )
-                self._status(number, CHANNEL_COUNT, "Reading UBC370CLT")
+                self._status(number, TOTAL_COUNT, "Reading UBC370CLT")
+            for index in range(1, FM_COUNT + 1):
+                _, tag, freq = parse_rin(self._exchange("RIN,%i" % index))
+                number = CHANNEL_COUNT + index
+                if freq and not fm_cleared(freq, tag):
+                    RECORD.pack_into(
+                        image, (number - 1) * RECORD_SIZE, freq, 0, 0, 0, 0,
+                        tag.encode("ascii", "replace"),
+                    )
+                self._status(number, TOTAL_COUNT, "Reading UBC370CLT")
             self._mmap = memmap.MemoryMapBytes(bytes(image))
             self.process_mmap()
         except errors.RadioError:
@@ -304,9 +359,12 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         try:
             self._enter_program_mode()
             entered = True
-            for number in range(1, CHANNEL_COUNT + 1):
-                self._write_channel(number)
-                self._status(number, CHANNEL_COUNT, "Writing UBC370CLT")
+            for number in range(1, TOTAL_COUNT + 1):
+                if is_fm(number):
+                    self._write_fm(number)
+                else:
+                    self._write_channel(number)
+                self._status(number, TOTAL_COUNT, "Writing UBC370CLT")
         except errors.RadioError:
             raise
         except Exception as exc:
@@ -341,6 +399,26 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
                 % (number, back_freq)
             )
 
+    def _write_fm(self, number):
+        freq, _, _, _, _, tag = self._record(number)
+        index = number - CHANNEL_COUNT
+        _, now_tag, now_freq = parse_rin(self._exchange("RIN,%i" % index))
+        if not freq:
+            if fm_cleared(now_freq, now_tag):
+                return
+            # The radio cannot empty a preset: write the cleared look.
+            freq, tag = FM_MIN, ""
+        elif abs(now_freq - freq) < FM_TOLERANCE and now_tag == tag:
+            return
+        self._exchange(rin_line(index, tag, freq))
+        back_freq = parse_rin(self._exchange("RIN,%i" % index))[2]
+        # The radio answers OK and keeps the old value outside 87.3-107.9.
+        if abs(back_freq - freq) >= FM_TOLERANCE:
+            raise errors.RadioError(
+                "The UBC370CLT did not accept %s: it holds %08i."
+                % (fm_label(number), back_freq)
+            )
+
     # -- image ------------------------------------------------------------
 
     def process_mmap(self):
@@ -355,14 +433,30 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
         text = tag.split(b"\x00", 1)[0].decode("ascii", "replace").rstrip()
         return freq, tone, delay, lockout, flag, text
 
+    def validate_memory(self, mem):
+        msgs = super().validate_memory(mem)
+        if is_fm(mem.number) and not mem.empty:
+            low, high = FM_MIN * FREQ_UNIT, FM_MAX * FREQ_UNIT
+            if not low <= mem.freq <= high:
+                msgs.append(chirp_common.ValidationError(
+                    "%s is an FM broadcast preset: 87.3 to 107.9 MHz only"
+                    % fm_label(mem.number)
+                ))
+            elif mem.tmode:
+                msgs.append(chirp_common.ValidationWarning(
+                    "%s is an FM broadcast preset and stores no tone"
+                    % fm_label(mem.number)
+                ))
+        return msgs
+
     def get_raw_memory(self, number):
         offset = (number - 1) * RECORD_SIZE
         return repr(self._mmap.get(offset, RECORD_SIZE))
 
     def get_memory(self, number):
-        if not 1 <= number <= CHANNEL_COUNT:
+        if not 1 <= number <= TOTAL_COUNT:
             raise errors.InvalidMemoryLocation(
-                "Channel number must be between 1 and %i" % CHANNEL_COUNT
+                "Channel number must be between 1 and %i" % TOTAL_COUNT
             )
         freq, tone, delay, lockout, flag, tag = self._record(number)
         mem = chirp_common.Memory()
@@ -373,9 +467,12 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
 
         mem.freq = freq * FREQ_UNIT
         mem.name = tag
-        mem.mode = "FM"
+        mem.mode = "WFM" if is_fm(number) else "FM"
         mem.duplex = ""
         mem.offset = 0
+        if is_fm(number):
+            # An FM preset holds a frequency and a name only.
+            return mem
         mem.skip = "S" if lockout else ""
         if CTCSS_BASE <= tone < CTCSS_BASE + len(CTCSS_TONES):
             mem.tmode = "TSQL"
@@ -398,9 +495,9 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
 
     def set_memory(self, memory):
         number = memory.number
-        if not 1 <= number <= CHANNEL_COUNT:
+        if not 1 <= number <= TOTAL_COUNT:
             raise errors.InvalidMemoryLocation(
-                "Channel number must be between 1 and %i" % CHANNEL_COUNT
+                "Channel number must be between 1 and %i" % TOTAL_COUNT
             )
         offset = (number - 1) * RECORD_SIZE
         old_freq, old_tone, old_delay, _, old_flag, _ = self._record(number)
@@ -410,6 +507,10 @@ class UBC370CLTRadio(chirp_common.CloneModeRadio,
             return
 
         freq = memory.freq // FREQ_UNIT
+        if is_fm(number):
+            tag = encode_tag(memory.name or "").encode("ascii")
+            self._mmap.set(offset, RECORD.pack(freq, 0, 0, 0, 0, tag))
+            return
         if memory.tmode == "TSQL":
             tone = CTCSS_BASE + CTCSS_FLOATS.index(float(memory.ctone))
         elif memory.tmode == "DTCS":

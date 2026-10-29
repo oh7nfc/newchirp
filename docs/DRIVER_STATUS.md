@@ -26,7 +26,7 @@ Last updated: 2026-10-29
 | Connect Systems CS750 | `drivers/newchirp_cs750.py` | NewChirp raw SCSI/RAP; CPS `.rdb` import | Yes, untested hardware | Disabled | Hidden | Experimental |
 | Baofeng GM-32 | `drivers/newchirp_gm32.py` | UV-32 clone serial, 115200 8N1 | Yes | Yes | Yes, including bank names | Experimental |
 | Midland MXT295 | `drivers/newchirp_mxt295.py` | CHIRP clone serial, 115200 8N1 | Yes, designed | Yes, hardware-tested | Radio & Modes | Hardware-tested |
-| Uniden UBC370CLT | `drivers/newchirp_ubc370clt.py` | USB serial text protocol, 115200 8N1 | Yes, 500 channels | Yes, changed channels only, read back | Hidden | Experimental |
+| Uniden UBC370CLT | `drivers/newchirp_ubc370clt.py` | USB serial text protocol, 115200 8N1 | Yes, 500 channels + 30 FM presets | Yes, changed entries only, read back | Hidden | Experimental |
 | Motorola MOTOTRBO R7 | `lib/services/mototrbo_cps2_xml.dart` | CPS 2.0 Zone XML import | Conventional channels | Disabled | Import-only extras | Experimental |
 
 ## Radio details
@@ -213,15 +213,22 @@ Last updated: 2026-10-29
 - Transport: scanner USB serial port at 115200 8N1, CR-terminated text lines.
   Not a CHIRP clone protocol, so the driver talks `MDL`, `PRG`, `CIN`, `EPG`
   directly and keeps the channels in a NewChirp-defined image.
-- Image: 500 records of 32 bytes (100 Hz frequency, tone, delay, lockout,
+- Image: 530 records of 32 bytes (500 channels, then 30 FM presets) (100 Hz frequency, tone, delay, lockout,
   unknown flag byte, 16-byte tag) plus a 32-byte trailer used by
   `match_model`. This is not an ARC370 file format.
 - Implemented: frequency, tag, CTCSS (as TSQL), DCS (as DTCS, normal
   polarity), lockout (as skip), and a Delay extra. The unknown flag byte and
   unrecognized tone numbers are preserved.
-- Not implemented: trunking systems, FM presets (`RIN`), the bank scan mask
-  (`SCG`), service searches, and bank names (the scanner stores none)
-- Read policy: 500 `CIN,<n>` reads in program mode
+- FM presets: `RIN,<n>` 1-30 appear as locations 501-530 (FM1 = 501-510,
+  FM2 = 511-520, FM3 = 521-530) with a frequency (87.3-107.9 MHz) and a name,
+  mode WFM. The radio cannot empty a preset, so an empty one is written as
+  87.3 MHz with no name and reads back as empty (a real nameless station on
+  87.3 MHz looks the same). Other frequencies are rejected by validation; the
+  radio would answer OK and keep the old value. The table labels them FM1-01
+  to FM3-10.
+- Not implemented: trunking systems, the bank scan mask (`SCG`), service
+  searches, and bank names (the scanner stores none)
+- Read policy: 500 `CIN,<n>` and 30 `RIN,<n>` reads in program mode
 - Write policy: each channel is read first, only differing channels are
   written, and each write is read back. The scanner answers OK but keeps the
   old frequency when it cannot receive the new one, so a read-back differing by

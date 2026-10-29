@@ -7737,10 +7737,16 @@ class _ChannelTableState extends State<_ChannelTable> {
     final columns = <_ChannelColumn>[
       _ChannelColumn(
         '#',
-        showsMidlandChannelNumbers(widget.radioModel) ? 96 : 52,
+        showsMidlandChannelNumbers(widget.radioModel)
+            ? 96
+            : widget.radioModel == unidenUbc370cltModel
+            ? 68
+            : 52,
         (channel) => channelNumberLabel(widget.radioModel, channel.location),
         help: showsMidlandChannelNumbers(widget.radioModel)
             ? 'Midland channel number. Repeater rows are labeled RPTR.'
+            : widget.radioModel == unidenUbc370cltModel
+            ? 'Memory channel 1-500. FM1-01 to FM3-10 are the FM presets.'
             : 'Memory channel number or slot stored in the radio.',
       ),
       _ChannelColumn(
