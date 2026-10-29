@@ -4,7 +4,7 @@ This is the authoritative local ledger for radios whose support is maintained
 by NewChirp rather than upstream CHIRP. Update it whenever a driver is added,
 changes transport, gains or loses write support, or completes hardware testing.
 
-Last updated: 2026-10-27
+Last updated: 2026-10-29
 
 ## Status definitions
 
@@ -26,6 +26,7 @@ Last updated: 2026-10-27
 | Connect Systems CS750 | `drivers/newchirp_cs750.py` | NewChirp raw SCSI/RAP; CPS `.rdb` import | Yes, untested hardware | Disabled | Hidden | Experimental |
 | Baofeng GM-32 | `drivers/newchirp_gm32.py` | UV-32 clone serial, 115200 8N1 | Yes | Yes | Yes, including bank names | Experimental |
 | Midland MXT295 | `drivers/newchirp_mxt295.py` | CHIRP clone serial, 115200 8N1 | Yes, designed | Yes, hardware-tested | Radio & Modes | Hardware-tested |
+| Uniden UBC370CLT | `drivers/newchirp_ubc370clt.py` | USB serial text protocol, 115200 8N1 | Yes, 500 channels | Yes, changed channels only, read back | Hidden | Experimental |
 | Motorola MOTOTRBO R7 | `lib/services/mototrbo_cps2_xml.dart` | CPS 2.0 Zone XML import | Conventional channels | Disabled | Import-only extras | Experimental |
 
 ## Radio details
@@ -200,6 +201,40 @@ Last updated: 2026-10-27
 - Read warning: the Midland driver is experimental, download and check channels before an upload, and keep a backup of your radio from the Midland program. Steps: 12 volt power, Bluetooth mic off, MXPG15 on the radio base.
 - Write warning: the Midland driver is experimental. Make a backup before using it to change the radio.
 - Next milestone: none for a first write. That write has already succeeded more than once. The app still warns that the driver is experimental.
+- Website catalog: not listed
+
+### Uniden UBC370CLT
+
+- Maintained driver: `drivers/newchirp_ubc370clt.py`
+- Protocol notes: `docs/PROTOCOL_370.md` in the standalone `bcd260dn-programmer`
+  repository (UBC370CLT programmer), probed on a physical unit, firmware 1.01.06
+- Evidence: BuTel ARC370 static analysis plus live probing on COM5; no ARC370
+  traffic capture. No proprietary artifact is bundled.
+- Transport: scanner USB serial port at 115200 8N1, CR-terminated text lines.
+  Not a CHIRP clone protocol, so the driver talks `MDL`, `PRG`, `CIN`, `JPM`
+  directly and keeps the channels in a NewChirp-defined image.
+- Image: 500 records of 32 bytes (100 Hz frequency, tone, delay, lockout,
+  unknown flag byte, 16-byte tag) plus a 32-byte trailer used by
+  `match_model`. This is not an ARC370 file format.
+- Implemented: frequency, tag, CTCSS (as TSQL), DCS (as DTCS, normal
+  polarity), lockout (as skip), and a Delay extra. The unknown flag byte and
+  unrecognized tone numbers are preserved.
+- Not implemented: trunking systems, FM presets (`RIN`), the bank scan mask
+  (`SCG`), service searches, and bank names (the scanner stores none)
+- Read policy: 500 `CIN,<n>` reads in program mode
+- Write policy: each channel is read first, only differing channels are
+  written, and each write is read back. The scanner answers OK but keeps the
+  old frequency when it cannot receive the new one, so a read-back differing by
+  12.5 kHz or more is an error. Deleted channels are written as the empty slot
+  because `DCH` is rejected.
+- Safety: the driver never sends `EPG`, which switched the tested radio off.
+  It leaves program mode with `JPM,SCN_MODE`.
+- Hardware validation: none from NewChirp. The protocol was probed with the
+  standalone programmer; the driver itself has only offline tests with a fake
+  scanner port. Those tests need the pinned CHIRP source and were run here only
+  against a stub of the CHIRP API.
+- Next milestone: download and upload a small edit on a physical UBC370CLT
+  from NewChirp, then compare the read-back with the standalone programmer
 - Website catalog: not listed
 
 ### Motorola MOTOTRBO R7
