@@ -169,6 +169,11 @@ String channelNumberLabel(String? model, int location) {
     final index = location - 501;
     return 'FM${index ~/ 10 + 1}-${(index % 10 + 1).toString().padLeft(2, '0')}';
   }
+  if (model == unidenUbc370cltModel && location >= 1 && location <= 500) {
+    // The scanner has 10 banks of 50 channels: B3-07 is bank 3, channel 7.
+    final index = location - 1;
+    return 'B${index ~/ 50 + 1}-${(index % 50 + 1).toString().padLeft(2, '0')}';
+  }
   if (!showsMidlandChannelNumbers(model)) return '$location';
   if (location < 1 || location > 107) return '$location';
   if (location <= 15) return '$location';

@@ -1387,7 +1387,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Moved ${moved.name} to channel ${moved.location}'),
+          content: Text(
+            'Moved ${moved.name} to channel '
+            '${channelNumberLabel(_model, moved.location)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1432,7 +1435,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Moved ${moved.name} to channel $targetLocation'),
+          content: Text(
+            'Moved ${moved.name} to channel '
+            '${channelNumberLabel(_model, targetLocation)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1491,7 +1497,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Inserted an empty slot before channel $location'),
+          content: Text(
+            'Inserted an empty slot before channel '
+            '${channelNumberLabel(_model, location)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -2111,7 +2120,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Channel $location added'),
+          content: Text('Channel ${channelNumberLabel(_model, location)} added'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -7882,7 +7891,8 @@ class _ChannelTableState extends State<_ChannelTable> {
         help: showsMidlandChannelNumbers(widget.radioModel)
             ? 'Midland channel number. Repeater rows are labeled RPTR.'
             : widget.radioModel == unidenUbc370cltModel
-            ? 'Memory channel 1-500. FM1-01 to FM3-10 are the FM presets.'
+            ? 'Bank and channel: B3-07 is bank 3, channel 7 (10 banks of 50). '
+                  'FM1-01 to FM3-10 are the FM presets.'
             : 'Memory channel number or slot stored in the radio.',
       ),
       _ChannelColumn(
@@ -8596,13 +8606,13 @@ class _ChannelEditor extends StatelessWidget {
                     Expanded(
                       child:
                           showsMidlandChannelNumbers(radioModel) ||
-                              isUnidenFmPreset(radioModel, channel.location)
+                              radioModel == unidenUbc370cltModel
                           ? _TextField(
-                              label: isUnidenFmPreset(
-                                    radioModel,
-                                    channel.location,
-                                  )
+                              label:
+                                  isUnidenFmPreset(radioModel, channel.location)
                                   ? 'FM preset'
+                                  : radioModel == unidenUbc370cltModel
+                                  ? 'Bank / channel'
                                   : 'Channel',
                               value: channelNumberLabel(
                                 radioModel,

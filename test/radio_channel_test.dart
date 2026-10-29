@@ -270,7 +270,11 @@ void main() {
   });
 
   test('UBC370CLT FM presets are labeled by bank', () {
-    expect(channelNumberLabel(unidenUbc370cltModel, 500), '500');
+    expect(channelNumberLabel(unidenUbc370cltModel, 1), 'B1-01');
+    expect(channelNumberLabel(unidenUbc370cltModel, 50), 'B1-50');
+    expect(channelNumberLabel(unidenUbc370cltModel, 51), 'B2-01');
+    expect(channelNumberLabel(unidenUbc370cltModel, 123), 'B3-23');
+    expect(channelNumberLabel(unidenUbc370cltModel, 500), 'B10-50');
     expect(channelNumberLabel(unidenUbc370cltModel, 501), 'FM1-01');
     expect(channelNumberLabel(unidenUbc370cltModel, 510), 'FM1-10');
     expect(channelNumberLabel(unidenUbc370cltModel, 511), 'FM2-01');
