@@ -412,6 +412,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
   List<String> _columnOrder = [];
   final Map<String, double> _columnWidths = {};
   bool _showEmptySlots = false;
+  bool _hideUnusedColumns = false;
   bool _columnLayoutTouched = false;
   Future<void>? _fileSaveWarningLoad;
   bool _hideFileSaveWarning = false;
@@ -546,6 +547,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         ..clear()
         ..addAll(layout.widths);
       _showEmptySlots = layout.showEmptySlots;
+      _hideUnusedColumns = layout.hideUnusedColumns;
     });
   }
 
@@ -556,6 +558,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
           order: _columnOrder,
           widths: Map.of(_columnWidths),
           showEmptySlots: _showEmptySlots,
+          hideUnusedColumns: _hideUnusedColumns,
         ),
       );
     } on FileSystemException {
@@ -741,6 +744,14 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     setState(() {
       _columnLayoutTouched = true;
       _showEmptySlots = show;
+    });
+    unawaited(_saveColumnLayout());
+  }
+
+  void _setHideUnusedColumns(bool hide) {
+    setState(() {
+      _columnLayoutTouched = true;
+      _hideUnusedColumns = hide;
     });
     unawaited(_saveColumnLayout());
   }
@@ -3656,6 +3667,21 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                                 tooltip:
                                     'Show every memory slot, including empty ones',
                               ),
+                              const SizedBox(width: 4),
+                              FilterChip(
+                                key: const ValueKey(
+                                  'hide-unused-columns-toggle',
+                                ),
+                                selected: _hideUnusedColumns,
+                                onSelected: _setHideUnusedColumns,
+                                avatar: const Icon(
+                                  Icons.view_column_outlined,
+                                  size: 17,
+                                ),
+                                label: const Text('Used'),
+                                tooltip:
+                                    'Hide columns that hold nothing for any channel',
+                              ),
                             ] else ...[
                               OutlinedButton.icon(
                                 onPressed: _duplicateChannel,
@@ -3677,6 +3703,21 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                                 label: const Text('Show empty slots'),
                                 tooltip:
                                     'Show every memory slot, including empty ones',
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                key: const ValueKey(
+                                  'hide-unused-columns-toggle',
+                                ),
+                                selected: _hideUnusedColumns,
+                                onSelected: _setHideUnusedColumns,
+                                avatar: const Icon(
+                                  Icons.view_column_outlined,
+                                  size: 17,
+                                ),
+                                label: const Text('Hide unused columns'),
+                                tooltip:
+                                    'Hide columns that hold nothing for any channel',
                               ),
                             ],
                             const SizedBox(width: 2),
@@ -3712,6 +3753,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                             capabilities: _capabilities,
                             columnOrder: _columnOrder,
                             columnWidths: _columnWidths,
+                            hideUnusedColumns: _hideUnusedColumns,
                             onColumnOrderChanged: _setColumnOrder,
                             onColumnWidthChanged: _setColumnWidth,
                             onSelect: (location) {
@@ -7507,6 +7549,15 @@ class _Metric extends StatelessWidget {
   );
 }
 
+/// Cell texts that mean a channel has nothing set in a column.
+const _unusedColumnValues = {'', '—', 'None', 'Simplex'};
+const _alwaysShownColumns = {'#', 'NAME', 'RX FREQUENCY'};
+
+/// True when every cell of a column is blank, so the column can be hidden.
+/// A column with no cells at all is not unused: there is nothing to judge.
+bool columnIsUnused(Iterable<String> values) =>
+    values.isNotEmpty && values.every(_unusedColumnValues.contains);
+
 class _ChannelColumn {
   _ChannelColumn(this.label, this.width, this.value, {String? id, this.help})
     : id = id ?? label;
@@ -7526,6 +7577,7 @@ class _ChannelTable extends StatefulWidget {
     required this.capabilities,
     required this.columnOrder,
     required this.columnWidths,
+    required this.hideUnusedColumns,
     required this.onColumnOrderChanged,
     required this.onColumnWidthChanged,
     required this.onSelect,
@@ -7549,6 +7601,7 @@ class _ChannelTable extends StatefulWidget {
   final RadioCapabilities? capabilities;
   final List<String> columnOrder;
   final Map<String, double> columnWidths;
+  final bool hideUnusedColumns;
   final ValueChanged<List<String>> onColumnOrderChanged;
   final void Function(String id, double width) onColumnWidthChanged;
   final ValueChanged<int> onSelect;
@@ -7878,13 +7931,30 @@ class _ChannelTableState extends State<_ChannelTable> {
     return columns;
   }
 
+  List<_ChannelColumn> _visibleColumns() {
+    final columns = _columns();
+    if (!widget.hideUnusedColumns) return columns;
+    final used = widget.entries
+        .map((entry) => entry.value)
+        .where((channel) => !channel.cleared)
+        .toList();
+    return columns
+        .where(
+          (column) =>
+              _alwaysShownColumns.contains(column.id) ||
+              !columnIsUnused(used.map(column.value)),
+        )
+        .toList();
+  }
+
   void _moveColumn(
     String draggedId,
     String targetId,
     List<_ChannelColumn> columns,
   ) {
     if (draggedId == targetId) return;
-    final order = columns.map((column) => column.id).toList();
+    // Hidden columns keep their place in the saved order.
+    final order = _columns().map((column) => column.id).toList();
     order.remove(draggedId);
     final targetIndex = order.indexOf(targetId);
     order.insert(targetIndex < 0 ? order.length : targetIndex, draggedId);
@@ -8144,7 +8214,7 @@ class _ChannelTableState extends State<_ChannelTable> {
   @override
   Widget build(BuildContext context) {
     const dragHandleWidth = 30.0;
-    final columns = _columns();
+    final columns = _visibleColumns();
     final tableWidth =
         dragHandleWidth +
         columns.fold<double>(0, (sum, column) => sum + column.width);
