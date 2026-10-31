@@ -34,6 +34,8 @@ Last updated: 2026-10-30
 | Radioddity DB35-G | `drivers/newchirp_db35g.py` | OEM clone serial, 115200 8N1 | 80 channels + settings | Disabled pending hardware validation | Basic radio settings | Experimental |
 | Midland MXT295 | `drivers/newchirp_mxt295.py` | CHIRP clone serial, 115200 8N1 | Yes, designed | Yes, hardware-tested | Radio & Modes | Hardware-tested |
 | Wouxun KG-UVD1P / KG-UV2D | Pinned CHIRP `wouxun.py` with NewChirp bridge timing | CHIRP clone serial, 9600 8N1 | One-second block timeout | Stock CHIRP driver | Stock CHIRP driver | Experimental timing override |
+| Uniden UBC370CLT | `drivers/newchirp_ubc370clt.py` | USB serial text protocol, 115200 8N1 | Yes, 500 channels + 30 FM presets | Yes, changed entries only, read back | Hidden | Experimental |
+| Uniden UBCD260DN / UBCD160DN | `drivers/newchirp_ubcd260dn.py` | USB serial text protocol, 115200 8N1 | Yes, 1000 channels + settings | Yes, changed channels and settings only | Scanner group | Experimental |
 | Icom IC-9700 | `drivers/newchirp_icom9700.py` | Icom CI-V serial, auto-baud from 4800 to 115200 | Stock CHIRP driver | Stock CHIRP driver | Stock CHIRP driver | Experimental |
 | Motorola MOTOTRBO R7 | `lib/services/mototrbo_cps2_xml.dart` | CPS 2.0 Zone XML import | Conventional channels | Disabled | Import-only extras | Experimental |
 
@@ -449,6 +451,114 @@ Last updated: 2026-10-30
   read. If the block is still short, capture whether Wouxun CPS can read it and
   provide the first response header bytes so the protocol variant can be
   separated from a cable timing issue.
+
+### Uniden UBC370CLT
+
+- Maintained driver: `drivers/newchirp_ubc370clt.py`
+- Protocol notes: `docs/PROTOCOL_370.md` in the standalone `bcd260dn-programmer`
+  repository (UBC370CLT programmer), probed on a physical unit, firmware 1.01.06
+- Evidence: BuTel ARC370 static analysis plus live probing on COM5; no ARC370
+  traffic capture. No proprietary artifact is bundled.
+- Transport: scanner USB serial port at 115200 8N1, CR-terminated text lines.
+  Not a CHIRP clone protocol, so the driver talks `MDL`, `PRG`, `CIN`, `EPG`
+  directly and keeps the channels in a NewChirp-defined image.
+- Image: 530 records of 32 bytes (500 channels, then 30 FM presets) (100 Hz frequency, tone, delay, lockout,
+  unknown flag byte, 16-byte tag) plus a 32-byte trailer used by
+  `match_model`. This is not an ARC370 file format.
+- Implemented: frequency, tag, CTCSS (as TSQL), DCS (as DTCS, normal
+  polarity), lockout (as skip), and a Delay extra. The unknown flag byte and
+  unrecognized tone numbers are preserved.
+- FM presets: `RIN,<n>` 1-30 appear as locations 501-530 (FM1 = 501-510,
+  FM2 = 511-520, FM3 = 521-530) with a frequency (87.3-107.9 MHz) and a name,
+  mode WFM. The radio cannot empty a preset, so an empty one is written as
+  87.3 MHz with no name and reads back as empty (a real nameless station on
+  87.3 MHz looks the same). Other frequencies are rejected by validation; the
+  radio would answer OK and keep the old value. The table labels them FM1-01
+  to FM3-10.
+- Bands and mode: receive bands come from the UBC370CLT manual's band table
+  (25-29.995, 30-79.9875, 80-82.99, 83-87.2875, 87.3-107.9 WFM, 108-136.9916
+  AM, 137-137.995, 138-157.9875, 158-160.59, 160.6-162.5875, 162.6-173.99,
+  406-439.9937, 440-465.995, 466-469.99, 470-512, 806-960 MHz; FM unless
+  noted). 174-406 and 512-806 MHz are not received. The scanner picks the mode
+  per band by itself and stores none, so NewChirp shows it read-only. The
+  driver reports these as `valid_bands` (upper limit +1 Hz, since CHIRP
+  treats it as exclusive) and the app flags a frequency outside the bands (and
+  an FM preset outside 87.3-107.9 MHz) in the editor and before a write. A write is checked against the band's step (5, 6.25, 8.33, 10, 12.5
+  or 100 kHz) when it is read back.
+- Not implemented: trunking systems, the bank scan mask (`SCG`), service
+  searches, and bank names (the scanner stores none)
+- Read policy: 500 `CIN,<n>` and 30 `RIN,<n>` reads in program mode
+- Write policy: each channel is read first, only differing channels are
+  written, and each write is read back. The scanner answers OK but keeps the
+  old frequency when it cannot receive the new one, so a read-back differing by
+  12.5 kHz or more is an error. Deleted channels are written as the empty slot
+  because `DCH` is rejected.
+- Exit: the driver ends every session with `EPG`, which powers the scanner
+  off, so it restarts in the mode of the FM/Service/Scanner slider. Only `EPG`
+  and `JPM,SCN_MODE` leave program mode (probed on COM5: a closed port, the
+  slider and `KEY,S,P` do not). `JPM,SCN_MODE` is avoided because it starts
+  scanning even when the slider is on FM, leaving the radio stalled.
+- Hardware validation: none from NewChirp. The protocol was probed with the
+  standalone programmer; the driver itself has only offline tests with a fake
+  scanner port. Those tests need the pinned CHIRP source and were run here only
+  against a stub of the CHIRP API.
+- Next milestone: download and upload a small edit on a physical UBC370CLT
+  from NewChirp, then compare the read-back with the standalone programmer
+- Website catalog: not listed
+
+### Uniden UBCD260DN / UBCD160DN
+
+- Maintained driver: `drivers/newchirp_ubcd260dn.py`
+- Protocol notes: `docs/PROTOCOL.md` in the standalone `bcd260dn-programmer`
+  repository, from ARC260 captures and reads of a physical UBCD260DN
+  (firmware 1.01.00). No proprietary artifact is bundled.
+- Transport: scanner USB serial port at 115200 8N1, CR-terminated text lines.
+  Not a CHIRP clone protocol, so the driver talks `MDL`, `STS`, `PRG`, `CIN`,
+  `DCH`, `EPG`, `KEY` directly and keeps the channels in a NewChirp-defined
+  image.
+- Image: 1000 records of 64 bytes, a 128-byte settings block, then a 32-byte
+  trailer used by `match_model`. This is not an ARC260 file format.
+- Implemented: 10 banks of 100 channels (locations 1-1000): frequency, tag,
+  mode (Auto, AM, FM, NFM, WFM, FMB for FM broadcast stations; the driver
+  adds FMB to the modes CHIRP's memory accepts), CTCSS (TSQL), DCS (DTCS,
+  standard 104 codes), lockout (skip), and extras: delay, priority,
+  attenuator, record, tone lockout, audio type (All, Analog only,
+  Digital only: the channel's "tone on" field), digital code (DMR/NXDN/dPMR, empty for
+  analog), volume offset, alert tone, level, light and pattern. The DMR slot,
+  digital wait and unrecognized tone numbers are preserved as read.
+- Settings (Scanner group): volume, squelch, key beep, key lock,
+  backlight and colour, contrast, the four opening message lines,
+  priority mode, channels and interval (`VOL SQL KBP BKL CNT OMS PRI`).
+  Read in the same session as the channels (read-only check on a physical
+  unit decoded them correctly). On upload only commands whose line differs
+  from the scanner are sent; `VOL`/`SQL` go in scan mode before `PRG`, the
+  rest in program mode. An image that never held settings writes none.
+- Bank names (Bank names group, `BIN,<n>`): ten names of up to 16 characters,
+  read with the channels and written only where they differ.
+- Not implemented: custom search ranges, the scan bank mask
+  (`SCG`/`CSG`), `SCO`/`DUD`/`BSP`/`SHK` settings, service searches, trunking
+- Read policy: `MDL` must name a BCD/UBCD 160/260 (DN); 1000 `CIN,<n>` reads in
+  program mode; unused slots read as frequency 0
+- Write policy: each channel is read first, only differing channels are
+  written as 21-field `CIN` lines, and each write is read back (a frequency a
+  step away is an error). Deleted channels use `DCH,<n>`.
+- Exit: `EPG`, then `KEY,S,P` only if `STS` showed the scanner scanning before
+  program mode. A scanner on hold is not toggled.
+- Hardware validation: none from NewChirp. The protocol was verified with the
+  standalone programmer; this driver has only offline tests with a fake
+  scanner port (`test/ubcd260dn_driver_test.py`).
+- Reference: the owner's manual (`docs/BCD260DNom.pdf` in the standalone
+  repository). Receive range 25-1300 MHz except 513-758 and 823.99-849.01 MHz
+  (the app flags others from `valid_bands`); delay 0/1/2/5/10/30 s or -2/-5/-10 s;
+  alert tone 1-9 or Off; alert level 1-15 or Auto; alert light 7 colours with
+  patterns Off/On/Slow/Fast; Record feeds the back panel REC output; priority
+  check interval 1-10 s and 1-100 priority channels per interval. The manual
+  has no battery menu, so battery save and charge time are not exposed.
+- Open questions: per-band frequency steps are only checked by the read-back,
+  DMR slot 2, and whether `DCH` is accepted on every firmware
+- Next milestone: download and upload a small edit on a physical UBCD260DN from
+  NewChirp, then compare the read-back with the standalone programmer
+- Website catalog: not listed
 
 ### Motorola MOTOTRBO R7
 

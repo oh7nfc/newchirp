@@ -175,6 +175,48 @@ Map<String, String> scanChoices(List<String>? allowed) {
   return {for (final value in values) value: scanLabel(value)};
 }
 
+/// CHIRP id for the experimental Uniden UBC370CLT driver.
+const unidenUbc370cltModel = 'Uniden_UBC370CLT';
+
+/// CHIRP id for the experimental Uniden UBCD260DN driver.
+const unidenUbcd260dnModel = 'Uniden_UBCD260DN';
+
+/// The Uniden scanners whose channels are shown as bank and channel.
+bool isUnidenScanner(String? model) =>
+    model == unidenUbc370cltModel || model == unidenUbcd260dnModel;
+
+/// Channels per bank: the UBC370CLT has 10 banks of 50, the UBCD260DN 10 of 100.
+int unidenBankSize(String? model) =>
+    model == unidenUbcd260dnModel ? 100 : 50;
+
+bool _withinMhz(double frequency, double low, double high) =>
+    frequency >= low - 0.0000005 && frequency <= high + 0.0000005;
+
+/// The UBC370CLT driver exposes its 30 FM presets as locations 501 to 530:
+/// FM1 is 501-510, FM2 is 511-520 and FM3 is 521-530.
+bool isUnidenFmPreset(String? model, int location) =>
+    model == unidenUbc370cltModel && location >= 501 && location <= 530;
+
+/// Last location of the ordinary channels when later locations are a separate
+/// group (the UBC370CLT's FM presets). Null when the radio has one group.
+int? ordinaryChannelEnd(String? model) =>
+    model == unidenUbc370cltModel ? 500 : null;
+
+/// First location of the slot group that holds [location].
+int slotGroupStart(String? model, int location, int memoryStart) =>
+    isUnidenFmPreset(model, location) ? 501 : memoryStart;
+
+/// Last location of the slot group that holds [location]. Inserting or
+/// removing a slot shifts channels only up to here, so channels and FM
+/// presets never push into each other.
+int? slotGroupEnd(String? model, int location, int? memoryEnd) {
+  final ordinary = ordinaryChannelEnd(model);
+  return ordinary != null && location <= ordinary ? ordinary : memoryEnd;
+}
+
+bool sameSlotGroup(String? model, int first, int second) =>
+    isUnidenFmPreset(model, first) == isUnidenFmPreset(model, second);
+
 /// CHIRP id for the experimental Midland MXT295 driver.
 const midlandMxt295Model = 'Midland_MXT295';
 
@@ -187,6 +229,19 @@ bool showsMidlandChannelNumbers(String? model) => model == midlandMxt295Model;
 /// matches the Midland screen: channels 1-99, with RPTR 15-22 between them.
 /// Other radios show the slot number unchanged.
 String channelNumberLabel(String? model, int location) {
+  if (isUnidenFmPreset(model, location)) {
+    final index = location - 501;
+    return 'FM${index ~/ 10 + 1}-${(index % 10 + 1).toString().padLeft(2, '0')} ($location)';
+  }
+  if (isUnidenScanner(model) &&
+      location >= 1 &&
+      location <= (model == unidenUbcd260dnModel ? 1000 : 500)) {
+    // B3-07 is bank 3, channel 7. The number in parentheses is the channel
+    // number the scanner stores.
+    final index = location - 1;
+    final size = unidenBankSize(model);
+    return 'B${index ~/ size + 1}-${(index % size + 1).toString().padLeft(2, '0')} ($location)';
+  }
   if (!showsMidlandChannelNumbers(model)) return '$location';
   if (location < 1 || location > 107) return '$location';
   if (location <= 15) return '$location';
@@ -717,6 +772,10 @@ class RadioChannel {
     }
     if (frequency <= 0 || frequency > 1300) {
       issues.add('Frequency must be between 0 and 1300 MHz.');
+    } else if (isUnidenFmPreset(radioModel, location)) {
+      if (!_withinMhz(frequency, 87.3, 107.9)) {
+        issues.add('FM presets cover 87.3 to 107.9 MHz.');
+      }
     }
     if (!const ['', '+', '-', 'split', 'off'].contains(duplex)) {
       issues.add('Duplex value is not supported.');

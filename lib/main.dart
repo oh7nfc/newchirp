@@ -15,6 +15,7 @@ import 'models/channel_image_baseline.dart';
 import 'models/gm32_channel.dart';
 import 'models/radio_channel.dart';
 import 'models/radio_mapping.dart';
+import 'models/radio_reference.dart' hide standardCtcssTones;
 import 'models/repeater_regions.dart';
 import 'models/repeater_search.dart';
 import 'services/chirp_csv.dart';
@@ -36,6 +37,7 @@ import 'widgets/file_save_warning_dialog.dart';
 import 'widgets/error_report_dialog.dart';
 import 'widgets/radio_model_picker.dart';
 import 'widgets/radio_mapping_dialog.dart';
+import 'widgets/reference_page.dart';
 
 const _menuChannel = MethodChannel('newchirp/menu');
 
@@ -425,6 +427,8 @@ class _NewChirpHomeState extends State<NewChirpHome> {
   List<String> _columnOrder = [];
   final Map<String, double> _columnWidths = {};
   bool _showEmptySlots = false;
+  bool _hideUnusedColumns = false;
+  int _referenceTab = 0;
   bool _columnLayoutTouched = false;
   Future<void>? _fileSaveWarningLoad;
   bool _hideFileSaveWarning = false;
@@ -620,6 +624,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         ..clear()
         ..addAll(layout.widths);
       _showEmptySlots = layout.showEmptySlots;
+      _hideUnusedColumns = layout.hideUnusedColumns;
     });
   }
 
@@ -630,6 +635,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
           order: _columnOrder,
           widths: Map.of(_columnWidths),
           showEmptySlots: _showEmptySlots,
+          hideUnusedColumns: _hideUnusedColumns,
         ),
       );
     } on FileSystemException {
@@ -859,6 +865,14 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     setState(() {
       _columnLayoutTouched = true;
       _showEmptySlots = show;
+    });
+    unawaited(_saveColumnLayout());
+  }
+
+  void _setHideUnusedColumns(bool hide) {
+    setState(() {
+      _columnLayoutTouched = true;
+      _hideUnusedColumns = hide;
     });
     unawaited(_saveColumnLayout());
   }
@@ -1420,11 +1434,16 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     });
   }
 
-  int? _nextChannelLocation() => RadioChannel.nextAvailableLocation(
-    _channels,
-    minimum: _capabilities?.memoryStart ?? 1,
-    maximum: _capabilities?.memoryEnd,
-  );
+  int? _nextChannelLocation() {
+    final ordinaryEnd = ordinaryChannelEnd(_model);
+    return RadioChannel.nextAvailableLocation(
+      ordinaryEnd == null
+          ? _channels
+          : _channels.where((channel) => channel.location <= ordinaryEnd),
+      minimum: _capabilities?.memoryStart ?? 1,
+      maximum: ordinaryEnd ?? _capabilities?.memoryEnd,
+    );
+  }
 
   List<String> _channelIssues(RadioChannel channel) => channel.validate(
     minimumLocation: _capabilities?.memoryStart,
@@ -1442,6 +1461,20 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     _channels.sort((left, right) => left.location.compareTo(right.location));
   }
 
+  void _showFmGroupMoveNotice() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'FM presets (501 to 530) and channels 1 to 500 cannot trade '
+            'places. Copy the frequency and name instead.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
   void _moveChannel(int fromIndex, int toIndex) {
     if (_query.isNotEmpty ||
         fromIndex == toIndex ||
@@ -1450,6 +1483,14 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         fromIndex >= _channels.length ||
         toIndex >= _channels.length ||
         _channels[fromIndex].cleared) {
+      return;
+    }
+    if (!sameSlotGroup(
+      _model,
+      _channels[fromIndex].location,
+      _channels[toIndex].location,
+    )) {
+      _showFmGroupMoveNotice();
       return;
     }
 
@@ -1490,7 +1531,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Moved ${moved.name} to channel ${moved.location}'),
+          content: Text(
+            'Moved ${moved.name} to channel '
+            '${channelNumberLabel(_model, moved.location)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1510,6 +1554,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     final moved = _channels[fromIndex];
     final previousLocation = moved.location;
     if (previousLocation == targetLocation) return;
+    if (!sameSlotGroup(_model, previousLocation, targetLocation)) {
+      _showFmGroupMoveNotice();
+      return;
+    }
 
     _recordHistory();
     setState(() {
@@ -1537,7 +1585,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Moved ${moved.name} to channel $targetLocation'),
+          content: Text(
+            'Moved ${moved.name} to channel '
+            '${channelNumberLabel(_model, targetLocation)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1563,29 +1614,30 @@ class _NewChirpHomeState extends State<NewChirpHome> {
         );
       return;
     }
-    final maximum = _capabilities?.memoryEnd;
+    final maximum = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
     if (maximum != null &&
-        _channels.any((channel) => channel.location >= maximum)) {
+        _channels.any((channel) => channel.location == maximum)) {
       _showNoEmptyChannelSlot();
       return;
     }
 
+    bool shifts(int slot) =>
+        slot >= location && (maximum == null || slot <= maximum);
     final selectedChannel = _current;
     _recordHistory();
     setState(() {
       final locationChanges = <int, int?>{
         location: null,
         for (final channel in _channels)
-          if (channel.location >= location)
-            channel.location: channel.location + 1,
+          if (shifts(channel.location)) channel.location: channel.location + 1,
       };
       for (final channel in _channels) {
-        if (channel.location >= location) channel.location += 1;
+        if (shifts(channel.location)) channel.location += 1;
       }
       _remapRadioMappingChannels(locationChanges);
       final shiftedClears =
           _clearedLocations
-              .map((cleared) => cleared >= location ? cleared + 1 : cleared)
+              .map((cleared) => shifts(cleared) ? cleared + 1 : cleared)
               .toSet()
             ..add(location);
       _clearedLocations
@@ -1602,7 +1654,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Inserted an empty slot before channel $location'),
+          content: Text(
+            'Inserted an empty slot before channel '
+            '${channelNumberLabel(_model, location)}',
+          ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1626,24 +1681,29 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       return;
     }
 
+    final groupEnd = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
+    bool shifts(int slot) =>
+        slot > location && (groupEnd == null || slot <= groupEnd);
     final selectedChannel = _current;
     _recordHistory();
     setState(() {
       final locationChanges = <int, int?>{
         for (final channel in _channels)
-          if (channel.location >= location)
-            channel.location: channel.location - 1,
+          if (shifts(channel.location)) channel.location: channel.location - 1,
         location: null,
       };
       _channels.removeWhere((channel) => channel.location == location);
       for (final channel in _channels) {
-        if (channel.location > location) channel.location -= 1;
+        if (shifts(channel.location)) channel.location -= 1;
       }
       _remapRadioMappingChannels(locationChanges);
       final shiftedClears = <int>{};
       for (final cleared in _clearedLocations) {
-        if (cleared < location) shiftedClears.add(cleared);
-        if (cleared > location) shiftedClears.add(cleared - 1);
+        if (cleared < location || (cleared > location && !shifts(cleared))) {
+          shiftedClears.add(cleared);
+        } else if (cleared > location) {
+          shiftedClears.add(cleared - 1);
+        }
       }
       _clearedLocations
         ..clear()
@@ -2078,19 +2138,59 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     final midland = showsMidlandChannelNumbers(_model);
     final gm32 = isBaofengGm32(_model);
     final specializedReceive = midland || gm32;
+    if (isUnidenFmPreset(_model, location)) {
+      // An FM preset starts inside 87.3-107.9 MHz, the only range it takes.
+      return RadioChannel(
+        location: location,
+        name: 'NEW ${channelNumberLabel(_model, location)}',
+        frequency: 87.5,
+        duplex: '',
+        offset: 0,
+      );
+    }
+    final receiveOnly = specializedReceive || isUnidenScanner(_model);
     return RadioChannel(
       location: location,
       name: 'NEW $location',
       frequency: specializedReceive ? 0 : 146.52,
       duplex: '',
-      offset: specializedReceive ? 0 : 0.6,
+      offset: receiveOnly ? 0 : 0.6,
+      extras: _extrasForNewChannel(location),
     );
+  }
+
+  /// Radio-specific settings (such as the UBC370CLT delay) only come with a
+  /// channel read from the radio, so a new channel copies the fields of an
+  /// existing one that belongs to the same slot group.
+  List<ChannelExtraField> _extrasForNewChannel(int location) {
+    for (final channel in _activeChannels) {
+      if (channel.extras.isEmpty ||
+          !sameSlotGroup(_model, channel.location, location)) {
+        continue;
+      }
+      return [
+        for (final field in channel.extras)
+          ChannelExtraField(
+            name: field.name,
+            label: field.label,
+            kind: field.kind,
+            value: field.value,
+            choices: field.choices,
+            mutable: field.mutable,
+            documentation: field.documentation,
+          ),
+      ];
+    }
+    return [];
   }
 
   int? _endInsertionLocation() {
     final minimum = _capabilities?.memoryStart ?? 1;
-    final maximum = _capabilities?.memoryEnd;
-    final active = _activeChannels;
+    final ordinaryEnd = ordinaryChannelEnd(_model);
+    final maximum = ordinaryEnd ?? _capabilities?.memoryEnd;
+    final active = ordinaryEnd == null
+        ? _activeChannels
+        : _activeChannels.where((channel) => channel.location <= ordinaryEnd);
     final location = active.isEmpty
         ? minimum
         : active
@@ -2164,8 +2264,11 @@ class _NewChirpHomeState extends State<NewChirpHome> {
   }
 
   void _insertChannelAt(int location) {
-    final minimum = _capabilities?.memoryStart;
-    final maximum = _capabilities?.memoryEnd;
+    final memoryStart = _capabilities?.memoryStart;
+    final minimum = memoryStart == null
+        ? null
+        : slotGroupStart(_model, location, memoryStart);
+    final maximum = slotGroupEnd(_model, location, _capabilities?.memoryEnd);
     if (maximum != null && location > maximum) {
       _showNoEmptyChannelSlot();
       return;
@@ -2179,7 +2282,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     );
     if (occupied &&
         maximum != null &&
-        _channels.any((channel) => channel.location >= maximum)) {
+        _channels.any((channel) => channel.location == maximum)) {
       _showNoEmptyChannelSlot();
       return;
     }
@@ -2189,16 +2292,18 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     setState(() {
       final locationChanges = <int, int?>{location: null};
       if (occupied) {
+        bool shifts(int slot) =>
+            slot >= location && (maximum == null || slot <= maximum);
         locationChanges.addAll({
           for (final existing in _channels)
-            if (existing.location >= location)
+            if (shifts(existing.location))
               existing.location: existing.location + 1,
         });
         for (final existing in _channels) {
-          if (existing.location >= location) existing.location += 1;
+          if (shifts(existing.location)) existing.location += 1;
         }
         final shiftedClears = _clearedLocations
-            .map((cleared) => cleared >= location ? cleared + 1 : cleared)
+            .map((cleared) => shifts(cleared) ? cleared + 1 : cleared)
             .toSet();
         _clearedLocations
           ..clear()
@@ -2222,7 +2327,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Channel $location added'),
+          content: Text('Channel ${channelNumberLabel(_model, location)} added'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -2994,15 +3099,23 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                             minimalMode: _page == 2 || _page == 3 || _page == 4,
                             minimalTitle: switch (_page) {
                               2 => 'About & licenses',
-                              3 => 'GMRS & FRS Frequency Reference',
+                              3 =>
+                                _referenceSection == null
+                                    ? 'GMRS & FRS Frequency Reference'
+                                    : _referenceSection!.title,
                               _ => 'Radio settings',
                             },
                             minimalSubtitle: switch (_page) {
-                              2 => 'Application information and open-source licenses',
-                              3 => 'Part 95 FRS/GMRS channel plan',
-                              _ => 'Radio-wide options exposed by the selected driver',
+                              2 =>
+                                'Application information and open-source licenses',
+                              3 =>
+                                _referenceSection == null
+                                    ? 'Part 95 FRS/GMRS channel plan'
+                                    : _referenceSection!.subtitle,
+                              _ =>
+                                'Radio-wide options exposed by the selected driver',
                             },
-                            showPrint: _page == 3,
+                            showPrint: _page == 3 && _referenceTab == 0,
                             onPrint: _printFrequencyReference,
                           ),
                           Expanded(
@@ -3705,6 +3818,62 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     return confirmed == true;
   }
 
+  Future<void> _showAttentionList() async {
+    final problems = [
+      for (final channel in _activeChannels)
+        if (_channelIssues(channel).isNotEmpty)
+          (channel: channel, issues: _channelIssues(channel)),
+    ];
+    if (problems.isEmpty || !mounted) return;
+    final location = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          problems.length == 1
+              ? '1 channel needs attention'
+              : '${problems.length} channels need attention',
+        ),
+        content: SizedBox(
+          width: 480,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final problem in problems)
+                ListTile(
+                  key: ValueKey('attention-${problem.channel.location}'),
+                  leading: const Icon(Icons.error_outline),
+                  title: Text(
+                    channelNumberLabel(_model, problem.channel.location) +
+                        (problem.channel.name.isEmpty
+                            ? ''
+                            : '  ${problem.channel.name}'),
+                  ),
+                  subtitle: Text(problem.issues.join('\n')),
+                  onTap: () =>
+                      Navigator.of(context).pop(problem.channel.location),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (location == null || !mounted) return;
+    final index = _channels.indexWhere(
+      (channel) => channel.location == location,
+    );
+    if (index >= 0) setState(() => _selected = index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _channelTableKey.currentState?.revealSelectedChannel();
+    });
+    unawaited(_showChannelEditorAtLocation(location));
+  }
+
   Widget _buildLibrary() {
     final visible = _channelTableRows();
     final libraryStats = _channelLibrarySnapshot;
@@ -3738,6 +3907,10 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                 icon: invalid == 0
                     ? Icons.check_circle_outline
                     : Icons.error_outline,
+                onTap: invalid == 0
+                    ? null
+                    : () => unawaited(_showAttentionList()),
+                tooltip: 'Show which channels need attention',
               ),
             ],
           ),
@@ -3935,6 +4108,21 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                                 label: const Text('Slots'),
                                 tooltip: 'Show every memory slot, including empty ones',
                               ),
+                              const SizedBox(width: 4),
+                              FilterChip(
+                                key: const ValueKey(
+                                  'hide-unused-columns-toggle',
+                                ),
+                                selected: _hideUnusedColumns,
+                                onSelected: _setHideUnusedColumns,
+                                avatar: const Icon(
+                                  Icons.view_column_outlined,
+                                  size: 17,
+                                ),
+                                label: const Text('Used'),
+                                tooltip:
+                                    'Hide columns that hold nothing for any channel',
+                              ),
                             ] else ...[
                               OutlinedButton.icon(
                                 onPressed: _duplicateChannel,
@@ -3955,6 +4143,21 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                                 avatar: const Icon(Icons.space_bar, size: 17),
                                 label: const Text('Show empty slots'),
                                 tooltip: 'Show every memory slot, including empty ones',
+                              ),
+                              const SizedBox(width: 8),
+                              FilterChip(
+                                key: const ValueKey(
+                                  'hide-unused-columns-toggle',
+                                ),
+                                selected: _hideUnusedColumns,
+                                onSelected: _setHideUnusedColumns,
+                                avatar: const Icon(
+                                  Icons.view_column_outlined,
+                                  size: 17,
+                                ),
+                                label: const Text('Hide unused columns'),
+                                tooltip:
+                                    'Hide columns that hold nothing for any channel',
                               ),
                             ],
                             const SizedBox(width: 2),
@@ -3990,6 +4193,7 @@ class _NewChirpHomeState extends State<NewChirpHome> {
                             capabilities: _capabilities,
                             columnOrder: _columnOrder,
                             columnWidths: _columnWidths,
+                            hideUnusedColumns: _hideUnusedColumns,
                             onColumnOrderChanged: _setColumnOrder,
                             onColumnWidthChanged: _setColumnWidth,
                             onSelect: (location) {
@@ -4252,7 +4456,50 @@ class _NewChirpHomeState extends State<NewChirpHome> {
     }
   }
 
+  /// The tab section of the reference page, or null on the GMRS & FRS tab.
+  ReferenceSection? get _referenceSection =>
+      _referenceTab >= 1 && _referenceTab <= referenceSections.length
+      ? referenceSections[_referenceTab - 1]
+      : null;
+
   Widget _buildFrequencyReference() {
+    final section = _referenceSection;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<int>(
+              key: const ValueKey('reference-tabs'),
+              showSelectedIcon: false,
+              segments: [
+                const ButtonSegment(value: 0, label: Text('GMRS & FRS')),
+                for (var i = 0; i < referenceSections.length; i++)
+                  ButtonSegment(
+                    value: i + 1,
+                    label: Text(referenceSections[i].label),
+                  ),
+              ],
+              selected: {_referenceTab},
+              onSelectionChanged: (selection) =>
+                  setState(() => _referenceTab = selection.first),
+            ),
+          ),
+        ),
+        Expanded(
+          child: section == null
+              ? _buildGmrsFrsReference()
+              : ReferencePage(
+                  key: ValueKey('reference-page-${section.id}'),
+                  section: section,
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGmrsFrsReference() {
     const green = Color(0xFF1F7455);
     const ink = Color(0xFF15211D);
     const muted = Color(0xFF56615B);
@@ -7818,14 +8065,24 @@ class _WelcomeAction extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value, required this.icon});
+  const _Metric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.onTap,
+    this.tooltip,
+  });
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onTap;
+  final String? tooltip;
   @override
   Widget build(BuildContext context) => Expanded(
     child: Card(
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: _tappable(
+        Padding(
         padding: const EdgeInsets.all(15),
         child: Row(
           children: [
@@ -7862,9 +8119,25 @@ class _Metric extends StatelessWidget {
           ],
         ),
       ),
+      ),
     ),
   );
+
+  Widget _tappable(Widget child) {
+    if (onTap == null) return child;
+    final tapped = InkWell(onTap: onTap, child: child);
+    return tooltip == null ? tapped : Tooltip(message: tooltip!, child: tapped);
+  }
 }
+
+/// Cell texts that mean a channel has nothing set in a column.
+const _unusedColumnValues = {'', '—', 'None', 'Simplex'};
+const _alwaysShownColumns = {'#', 'NAME', 'RX FREQUENCY'};
+
+/// True when every cell of a column is blank, so the column can be hidden.
+/// A column with no cells at all is not unused: there is nothing to judge.
+bool columnIsUnused(Iterable<String> values) =>
+    values.isNotEmpty && values.every(_unusedColumnValues.contains);
 
 class _ChannelColumn {
   _ChannelColumn(this.label, this.width, this.value, {String? id, this.help})
@@ -7885,6 +8158,7 @@ class _ChannelTable extends StatefulWidget {
     required this.capabilities,
     required this.columnOrder,
     required this.columnWidths,
+    required this.hideUnusedColumns,
     required this.onColumnOrderChanged,
     required this.onColumnWidthChanged,
     required this.onSelect,
@@ -7908,6 +8182,7 @@ class _ChannelTable extends StatefulWidget {
   final RadioCapabilities? capabilities;
   final List<String> columnOrder;
   final Map<String, double> columnWidths;
+  final bool hideUnusedColumns;
   final ValueChanged<List<String>> onColumnOrderChanged;
   final void Function(String id, double width) onColumnWidthChanged;
   final ValueChanged<int> onSelect;
@@ -8043,10 +8318,20 @@ class _ChannelTableState extends State<_ChannelTable> {
     final columns = <_ChannelColumn>[
       _ChannelColumn(
         '#',
-        showsMidlandChannelNumbers(widget.radioModel) ? 96 : 52,
+        showsMidlandChannelNumbers(widget.radioModel)
+            ? 96
+            : isUnidenScanner(widget.radioModel)
+            ? 100
+            : 52,
         (channel) => channelNumberLabel(widget.radioModel, channel.location),
         help: showsMidlandChannelNumbers(widget.radioModel)
             ? 'Midland channel number. Repeater rows are labeled RPTR.'
+            : isUnidenScanner(widget.radioModel)
+            ? 'Bank and channel: B3-07 is bank 3, channel 7 (10 banks of '
+                  '${unidenBankSize(widget.radioModel)}). '
+                  'On the UBC370CLT FM1-01 to FM3-10 are the FM presets. The '
+                  'number in parentheses is the channel number stored in the '
+                  'scanner.'
             : 'Memory channel number or slot stored in the radio.',
       ),
       _ChannelColumn(
@@ -8148,7 +8433,11 @@ class _ChannelTableState extends State<_ChannelTable> {
         'MODE',
         68,
         (channel) => channel.mode,
-        help: 'Voice modulation: FM, narrowband FM, or AM depending on the radio.',
+        help: widget.capabilities?.modeReadOnly ?? false
+            ? 'Shown for information only: this radio stores no mode per '
+                  'channel.'
+            : 'Voice modulation: FM, narrowband FM, or AM depending on the '
+                  'radio.',
       ),
       if (showStep)
         _ChannelColumn(
@@ -8235,13 +8524,30 @@ class _ChannelTableState extends State<_ChannelTable> {
     return columns;
   }
 
+  List<_ChannelColumn> _visibleColumns() {
+    final columns = _columns();
+    if (!widget.hideUnusedColumns) return columns;
+    final used = widget.entries
+        .map((entry) => entry.value)
+        .where((channel) => !channel.cleared)
+        .toList();
+    return columns
+        .where(
+          (column) =>
+              _alwaysShownColumns.contains(column.id) ||
+              !columnIsUnused(used.map(column.value)),
+        )
+        .toList();
+  }
+
   void _moveColumn(
     String draggedId,
     String targetId,
     List<_ChannelColumn> columns,
   ) {
     if (draggedId == targetId) return;
-    final order = columns.map((column) => column.id).toList();
+    // Hidden columns keep their place in the saved order.
+    final order = _columns().map((column) => column.id).toList();
     order.remove(draggedId);
     final targetIndex = order.indexOf(targetId);
     order.insert(targetIndex < 0 ? order.length : targetIndex, draggedId);
@@ -8501,7 +8807,7 @@ class _ChannelTableState extends State<_ChannelTable> {
   @override
   Widget build(BuildContext context) {
     const dragHandleWidth = 30.0;
-    final columns = _columns();
+    final columns = _visibleColumns();
     final tableWidth =
         dragHandleWidth +
         columns.fold<double>(0, (sum, column) => sum + column.width);
@@ -8748,9 +9054,16 @@ class _ChannelEditor extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: showsMidlandChannelNumbers(radioModel)
+                      child:
+                          showsMidlandChannelNumbers(radioModel) ||
+                              isUnidenScanner(radioModel)
                           ? _TextField(
-                              label: 'Channel',
+                              label:
+                                  isUnidenFmPreset(radioModel, channel.location)
+                                  ? 'FM preset'
+                                  : isUnidenScanner(radioModel)
+                                  ? 'Bank / channel'
+                                  : 'Channel',
                               value: channelNumberLabel(
                                 radioModel,
                                 channel.location,
@@ -9000,6 +9313,11 @@ class _ChannelEditor extends StatelessWidget {
                       child: _ChoiceField(
                         key: narrowLow ? const ValueKey('gm32-mode-nfm') : null,
                         label: 'Mode',
+                        enabled: !(capabilities?.modeReadOnly ?? false),
+                        documentation: (capabilities?.modeReadOnly ?? false)
+                            ? 'This radio stores no mode per channel. The mode '
+                                  'is shown for information only.'
+                            : null,
                         value: channel.mode,
                         choices: narrowLow
                             ? const {'NFM': 'NFM'}

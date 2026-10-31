@@ -1732,6 +1732,49 @@ void main() {
     expect(find.text('Print'), findsOneWidget);
   });
 
+  testWidgets('reference tabs show PMR446 channels and tone codes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(testApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Frequency reference'));
+    await tester.pumpAndSettle();
+    expect(find.text('Print'), findsOneWidget);
+
+    await tester.tap(find.text('PMR446'));
+    await tester.pumpAndSettle();
+    expect(find.text('PMR446 Channels'), findsNWidgets(2));
+    expect(find.text('446.006250'), findsOneWidget);
+    expect(find.text('446.003125'), findsOneWidget);
+    expect(find.text('Repeater Pairs (GMRS Only)'), findsNothing);
+    expect(find.text('Print'), findsNothing);
+
+    await tester.tap(find.text('Tone codes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Tone Code Reference'), findsNWidgets(2));
+    expect(find.text('Motorola PL'), findsOneWidget);
+    expect(find.text('Motorola Talkabout T82'), findsNWidgets(2));
+    expect(find.text('President CB radios'), findsNWidgets(2));
+
+    await tester.enterText(
+      find.byKey(const ValueKey('reference-filter-tones')),
+      '1Z',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('100.0'), findsOneWidget);
+    expect(find.text('No matching rows'), findsOneWidget);
+
+    await tester.tap(find.text('GMRS & FRS'));
+    await tester.pumpAndSettle();
+    expect(find.text('462.5625'), findsOneWidget);
+    expect(find.text('Print'), findsOneWidget);
+  });
+
   testWidgets('bundled serial backend loads the CHIRP radio catalog', (
     tester,
   ) async {
