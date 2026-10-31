@@ -893,6 +893,7 @@ def features_json(radio):
             for start, end in features.valid_bands
         ],
         "hasTuningStep": features.has_tuning_step,
+        "modeReadOnly": bool(getattr(radio, "NEWCHIRP_MODE_READ_ONLY", False)),
     }
 
 

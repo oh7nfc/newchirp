@@ -262,6 +262,53 @@ void main() {
     );
   });
 
+  test('UBC370CLT FM presets are labeled by bank', () {
+    expect(channelNumberLabel(unidenUbc370cltModel, 1), 'B1-01 (1)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 50), 'B1-50 (50)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 51), 'B2-01 (51)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 123), 'B3-23 (123)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 500), 'B10-50 (500)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 501), 'FM1-01 (501)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 510), 'FM1-10 (510)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 511), 'FM2-01 (511)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 530), 'FM3-10 (530)');
+    expect(channelNumberLabel('Yaesu_FTM-150R', 505), '505');
+  });
+
+  test('UBC370CLT channels and FM presets are separate slot groups', () {
+    const model = unidenUbc370cltModel;
+    expect(ordinaryChannelEnd(model), 500);
+    expect(ordinaryChannelEnd('Yaesu_FTM-150R'), isNull);
+    expect(slotGroupEnd(model, 10, 530), 500);
+    expect(slotGroupEnd(model, 500, 530), 500);
+    expect(slotGroupEnd(model, 501, 530), 530);
+    expect(slotGroupStart(model, 505, 1), 501);
+    expect(slotGroupStart(model, 5, 1), 1);
+    expect(slotGroupEnd('Yaesu_FTM-150R', 10, 999), 999);
+    expect(sameSlotGroup(model, 500, 501), isFalse);
+    expect(sameSlotGroup(model, 501, 530), isTrue);
+    expect(sameSlotGroup(model, 1, 500), isTrue);
+  });
+
+  test('FM presets take 87.3-107.9 MHz only', () {
+    RadioChannel at(int location, double mhz) =>
+        RadioChannel(location: location, name: 'T', frequency: mhz);
+    List<String> issues(RadioChannel channel) =>
+        channel.validate(radioModel: unidenUbc370cltModel);
+
+    expect(issues(at(501, 98.0)), isEmpty);
+    expect(issues(at(501, 145.0)).single, contains('FM presets'));
+    expect(issues(at(530, 87.3)), isEmpty);
+    expect(issues(at(1, 145.0)), isEmpty);
+  });
+
+  test('UBCD260DN channels show bank, channel and stored number', () {
+    expect(channelNumberLabel(unidenUbcd260dnModel, 1), 'B1-01 (1)');
+    expect(channelNumberLabel(unidenUbcd260dnModel, 207), 'B3-07 (207)');
+    expect(channelNumberLabel(unidenUbcd260dnModel, 1000), 'B10-100 (1000)');
+    expect(channelNumberLabel(unidenUbc370cltModel, 123), 'B3-23 (123)');
+  });
+
   test('frequency validation names the nearest supported tuning step', () {
     const uv5rSteps = [2.5, 5.0, 6.25, 10.0, 12.5, 20.0, 25.0, 50.0];
     final unsupported = RadioChannel(

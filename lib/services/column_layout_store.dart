@@ -6,11 +6,13 @@ class ColumnLayout {
     required this.order,
     required this.widths,
     this.showEmptySlots = false,
+    this.hideUnusedColumns = false,
   });
 
   final List<String> order;
   final Map<String, double> widths;
   final bool showEmptySlots;
+  final bool hideUnusedColumns;
 }
 
 class ColumnLayoutStore {
@@ -37,6 +39,7 @@ class ColumnLayoutStore {
         order: order,
         widths: widths,
         showEmptySlots: data['showEmptySlots'] == true,
+        hideUnusedColumns: data['hideUnusedColumns'] == true,
       );
     } on FormatException {
       return null;
@@ -54,6 +57,7 @@ class ColumnLayoutStore {
         'order': layout.order,
         'widths': layout.widths,
         'showEmptySlots': layout.showEmptySlots,
+        'hideUnusedColumns': layout.hideUnusedColumns,
       }),
       flush: true,
     );
