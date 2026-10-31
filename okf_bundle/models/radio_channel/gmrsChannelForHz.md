@@ -11,7 +11,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/gmrsChannelForHz
 language: dart
 ---
@@ -31,7 +31,7 @@ intgmrsChannelForHzgmrsChannelForHz
 GMRS channel 1-22 for a receive frequency, or null when it is not one.
 
 ## Source
-Lines 195–195 in `models/radio_channel.dart`
+Lines 248–248 in `models/radio_channel.dart`
 
 ## Relationships
 

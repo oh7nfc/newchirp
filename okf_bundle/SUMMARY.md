@@ -1,47 +1,48 @@
 ---
-description: 'Top-level OKF summary: 476 concepts across 4 domains and 23 modules'
+description: 'Top-level OKF summary: 516 concepts across 4 domains and 26 modules'
 git_branch: main
 git_repo: newchirp
 okf_version: '0.2'
-timestamp: '2026-10-30T10:22:42Z'
+timestamp: '2026-10-31T00:09:11Z'
 title: okf_bundle — Knowledge Summary
 type: Index
 ---
 
 # okf_bundle — Knowledge Summary
 
-> OKF v0.2 bundle | 476 concepts | 4 domains | 23 modules
+> OKF v0.2 bundle | 516 concepts | 4 domains | 26 modules
 
 ## Stats
 
 | Type | Count |
 |------|-------|
-| Function | 373 |
-| Class | 74 |
-| Module | 23 |
+| Function | 405 |
+| Class | 79 |
+| Module | 26 |
 | Enum | 6 |
 
 | Language | Concepts |
 |----------|----------|
-| dart | 476 |
+| dart | 516 |
 
 ## Domain Map
 
 Use these links to navigate the bundle or prime an AI agent with focused context.
 
-### [main.dart](main.dart/index.md) — 187 concepts
+### [main.dart](main.dart/index.md) — 193 concepts
 
-- [main](main/index.md) (187 concepts)
+- [main](main/index.md) (193 concepts)
 
-### [models](models/index.md) — 71 concepts
+### [models](models/index.md) — 82 concepts
 
 - [models/radio_channel](models/radio_channel/index.md) (37 concepts)
 - [models/gm32_channel](models/gm32_channel/index.md) (15 concepts)
+- [models/radio_mapping](models/radio_mapping/index.md) (11 concepts)
 - [models/channel_image_baseline](models/channel_image_baseline/index.md) (9 concepts)
 - [models/repeater_search](models/repeater_search/index.md) (7 concepts)
 - [models/repeater_regions](models/repeater_regions/index.md) (3 concepts)
 
-### [services](services/index.md) — 186 concepts
+### [services](services/index.md) — 193 concepts
 
 - [services/radio_bridge](services/radio_bridge/index.md) (46 concepts)
 - [services/module_sandbox](services/module_sandbox/index.md) (35 concepts)
@@ -51,11 +52,12 @@ Use these links to navigate the bundle or prime an AI agent with focused context
 - [services/update_installer](services/update_installer/index.md) (11 concepts)
 - [services/chirp_csv](services/chirp_csv/index.md) (10 concepts)
 - [services/radio_image_store](services/radio_image_store/index.md) (8 concepts)
-- *…and 5 more modules*
+- *…and 6 more modules*
 
-### [widgets](widgets/index.md) — 32 concepts
+### [widgets](widgets/index.md) — 48 concepts
 
-- [widgets/radio_model_picker](widgets/radio_model_picker/index.md) (17 concepts)
+- [widgets/radio_model_picker](widgets/radio_model_picker/index.md) (18 concepts)
+- [widgets/radio_mapping_dialog](widgets/radio_mapping_dialog/index.md) (15 concepts)
 - [widgets/error_report_dialog](widgets/error_report_dialog/index.md) (7 concepts)
 - [widgets/file_save_warning_dialog](widgets/file_save_warning_dialog/index.md) (5 concepts)
 - [widgets/channel_library_image_bar](widgets/channel_library_image_bar/index.md) (3 concepts)
@@ -70,11 +72,11 @@ Highest-value concepts across all domains (Classes and Functions with rich descr
 | [isAllowedDownloadUrl](/services/update_checker/isAllowedDownloadUrl.md) | Function | `services/update_checker.dart` | True when [url] is an https link on newchirp.net, with no lo… |
 | [trustedUpdateArtifactUrl](/services/update_checker/trustedUpdateArtifactUrl.md) | Function | `services/update_checker.dart` | Validated installer URL for [platform], or null when it is n… |
 | [MototrboCps2Xml](/services/mototrbo_cps2_xml/MototrboCps2Xml.md) | Class | `services/mototrbo_cps2_xml.dart` | Read-only importer for conventional channels copied from MOT… |
-| [trustedDownloadUrl](/services/update_checker/trustedDownloadUrl.md) | Function | `services/update_checker.dart` | Address the Update button may open. Untrusted links use the … |
 | [UpdateInstaller](/services/update_installer/UpdateInstaller.md) | Class | `services/update_installer.dart` | Downloads a direct NewChirp installer and starts the native … |
+| [trustedDownloadUrl](/services/update_checker/trustedDownloadUrl.md) | Function | `services/update_checker.dart` | Address the Update button may open. Untrusted links use the … |
 | [ChannelImageBaseline](/models/channel_image_baseline/ChannelImageBaseline.md) | Class | `models/channel_image_baseline.dart` | Fingerprint of the channel list last read from, imported fro… |
-| [_resolvePython](/services/radio_bridge/resolvePython.md) | Function | `services/radio_bridge.dart` | The bundled CHIRP tree uses Python 3.10+ syntax, so prefer a… |
 | [ChannelLibraryImageBar](/widgets/channel_library_image_bar/ChannelLibraryImageBar.md) | Class | `widgets/channel_library_image_bar.dart` | Bottom bar on the Channel Library, matching the Radio settin… |
+| [_resolvePython](/services/radio_bridge/resolvePython.md) | Function | `services/radio_bridge.dart` | The bundled CHIRP tree uses Python 3.10+ syntax, so prefer a… |
 | [midlandReceiveChannelIsUnset](/models/radio_channel/midlandReceiveChannelIsUnset.md) | Function | `models/radio_channel.dart` | A new row has no receive channel yet. 146.52 MHz is the old … |
 | [install](/services/update_installer/install.md) | Function | `services/update_installer.dart` | Starts the detached native helper that will install after th… |
 | [_windowsSerialPortNames](/services/radio_bridge/windowsSerialPortNames.md) | Function | `services/radio_bridge.dart` | Windows: read the live COM ports from the SERIALCOMM registr… |

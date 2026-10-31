@@ -10,7 +10,7 @@ tags:
   - "domain:radio_bridge.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T17:46:45Z"
+timestamp: "2026-10-31T00:09:10Z"
 concept_id: services/radio_bridge/imageCapabilities
 language: dart
 ---
@@ -24,7 +24,7 @@ FutureimageCapabilitiesimageCapabilities
 ```
 
 ## Source
-Lines 550–550 in `services/radio_bridge.dart`
+Lines 566–566 in `services/radio_bridge.dart`
 
 ## Relationships
 

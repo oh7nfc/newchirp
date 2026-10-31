@@ -10,7 +10,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/RadioChannel
 language: dart
 ---
@@ -44,7 +44,7 @@ RadioChannel({
 ```
 
 ## Source
-Lines 402–422 in `models/radio_channel.dart`
+Lines 455–475 in `models/radio_channel.dart`
 
 ## Relationships
 

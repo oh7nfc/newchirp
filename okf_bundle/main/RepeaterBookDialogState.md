@@ -9,7 +9,7 @@ tags:
   - "module:main.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-30T10:22:35Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: main/RepeaterBookDialogState
 language: dart
 ---
@@ -24,9 +24,12 @@ class _RepeaterBookDialogState
 
 ## Methods
 
+- `initState`
+- `_loadPreferences`
 - `_selectCountry`
 - `dispose`
 - `_search`
+- `_emptyResultsMessage`
 - `_chooseCounties`
 - `_searchAmateurInstead`
 - `_channelDetail`
@@ -37,7 +40,7 @@ class _RepeaterBookDialogState
 - `resizeBy`
 
 ## Source
-Lines 6456–7447 in `main.dart`
+Lines 6666–7717 in `main.dart`
 
 ## Relationships
 

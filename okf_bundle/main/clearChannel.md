@@ -9,7 +9,7 @@ tags:
   - "module:main.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-30T10:22:35Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: main/clearChannel
 language: dart
 ---
@@ -23,7 +23,7 @@ void_clearChannel(int index)
 ```
 
 ## Source
-Lines 2275–2275 in `main.dart`
+Lines 2422–2422 in `main.dart`
 
 ## Relationships
 

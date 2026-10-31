@@ -11,7 +11,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/midlandDuplexIsLocked
 language: dart
 ---
@@ -32,7 +32,7 @@ Channels 1-14, a GMRS 1-14 receive channel, and the repeater rows
 cannot change duplex.
 
 ## Source
-Lines 322–322 in `models/radio_channel.dart`
+Lines 375–375 in `models/radio_channel.dart`
 
 ## Relationships
 

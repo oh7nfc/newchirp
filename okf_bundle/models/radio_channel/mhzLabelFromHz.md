@@ -10,7 +10,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/mhzLabelFromHz
 language: dart
 ---
@@ -24,7 +24,7 @@ StringmhzLabelFromHz(int hz)
 ```
 
 ## Source
-Lines 280–280 in `models/radio_channel.dart`
+Lines 333–333 in `models/radio_channel.dart`
 
 ## Relationships
 

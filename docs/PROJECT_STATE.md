@@ -121,6 +121,9 @@ Linux 1.0.26 SHA-256:
   handshaking again.
 - TK-880 channel operations use CHIRP subdevices/zones.
 - Multi-zone selector with real zone names and channel counts.
+- Added a generic CHIRP banks/zones editor with rename, channel membership,
+  and spare-zone creation. DM-32UV offline image tests cover multi-zone
+  membership; physical zone write validation is still pending.
 - Zone switching reloads from the saved parent image and preserves other zones
   during upload.
 - Radio prompt HTML is stripped and driver "click OK" text is rewritten to the
@@ -246,9 +249,9 @@ Full verification before the Linux `1.0.17` release:
   radio. The automated test uses CHIRP's `Kenwood_TK-880.img`.
 - TD-H3 upload uses a protocol-level fake serial test. Physical hardware
   confirmation is still desirable.
-- Building a repeater list without radio metadata currently has a fallback for
-  DTCS but not for the standard CTCSS tone list. This can make the TX/RX tone
-  selector appear to offer only `88.5`.
+- Building a repeater list without radio metadata uses the standard CTCSS and
+  DTCS tables, so the TX/RX tone selectors remain usable before a radio image
+  is loaded.
 - CHIRP drivers can expose additional subdevice types beyond the zones handled
   for the TK-880.
 - CHIRP modules run in a sandbox that blocks the home folder, other drives,

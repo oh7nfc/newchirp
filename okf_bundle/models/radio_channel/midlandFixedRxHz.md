@@ -11,7 +11,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/midlandFixedRxHz
 language: dart
 ---
@@ -34,7 +34,7 @@ Returns null for channels 23 through 99. Those rows pick one of the
 same 22 GMRS channels from the list.
 
 ## Source
-Lines 213–213 in `models/radio_channel.dart`
+Lines 266–266 in `models/radio_channel.dart`
 
 ## Relationships
 

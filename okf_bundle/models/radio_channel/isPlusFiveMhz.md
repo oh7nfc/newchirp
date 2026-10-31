@@ -10,7 +10,7 @@ tags:
   - "domain:radio_channel.dart"
   - "git:branch:main"
   - "git:repo:newchirp"
-timestamp: "2026-10-29T12:56:29Z"
+timestamp: "2026-10-30T23:58:44Z"
 concept_id: models/radio_channel/isPlusFiveMhz
 language: dart
 ---
@@ -24,7 +24,7 @@ bool_isPlusFiveMhz(double offset)
 ```
 
 ## Source
-Lines 286–286 in `models/radio_channel.dart`
+Lines 339–339 in `models/radio_channel.dart`
 
 ## Relationships
 

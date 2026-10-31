@@ -10,6 +10,7 @@ import 'package:newchirp/models/repeater_search.dart';
 import 'package:newchirp/services/column_layout_store.dart';
 import 'package:newchirp/services/file_save_warning_store.dart';
 import 'package:newchirp/services/radio_bridge.dart';
+import 'package:newchirp/services/repeater_search_preferences_store.dart';
 import 'package:newchirp/services/update_checker.dart';
 import 'package:newchirp/services/update_installer.dart';
 
@@ -83,9 +84,14 @@ class _FakeUpdateInstaller extends UpdateInstaller {
 }
 
 class _FakeRepeaterBridge extends RadioBridge {
+  _FakeRepeaterBridge({this.emptyResults = false});
+
+  final bool emptyResults;
   String? lastCountry;
   String? lastState;
   String? lastService;
+  bool? lastFmOnly;
+  bool? lastOpenOnly;
 
   @override
   Future<RepeaterSearchResults> searchRepeaters({
@@ -96,13 +102,23 @@ class _FakeRepeaterBridge extends RadioBridge {
     double? latitude,
     double? longitude,
     double? distance,
-    bool fmOnly = true,
-    bool openOnly = true,
+    bool fmOnly = false,
+    bool openOnly = false,
     void Function(RadioProgress)? onProgress,
   }) async {
     lastCountry = country;
     lastState = state;
     lastService = service;
+    lastFmOnly = fmOnly;
+    lastOpenOnly = openOnly;
+    if (emptyResults) {
+      return const RepeaterSearchResults(
+        source: 'RepeaterBook',
+        sourceUrl: 'https://repeaterbook.com',
+        totalMatches: 0,
+        results: [],
+      );
+    }
     final channel = RadioChannel(
       location: 1,
       name: 'Buffalo',
@@ -151,6 +167,23 @@ class _FakeRepeaterBridge extends RadioBridge {
         ),
       ],
     );
+  }
+}
+
+class _FakeRepeaterSearchPreferencesStore
+    extends RepeaterSearchPreferencesStore {
+  _FakeRepeaterSearchPreferencesStore([
+    this.preferences = const RepeaterSearchPreferences(),
+  ]);
+
+  RepeaterSearchPreferences preferences;
+
+  @override
+  Future<RepeaterSearchPreferences> load() async => preferences;
+
+  @override
+  Future<void> save(RepeaterSearchPreferences next) async {
+    preferences = next;
   }
 }
 
@@ -232,6 +265,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     List<RadioChannel>? selected;
     final bridge = _FakeRepeaterBridge();
+    final preferencesStore = _FakeRepeaterSearchPreferencesStore();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -241,7 +275,10 @@ void main() {
               onPressed: () async {
                 selected = await showDialog<List<RadioChannel>>(
                   context: context,
-                  builder: (context) => RepeaterBookDialog(bridge: bridge),
+                  builder: (context) => RepeaterBookDialog(
+                    bridge: bridge,
+                    preferencesStore: preferencesStore,
+                  ),
                 );
               },
               child: const Text('Open repeater search'),
@@ -257,6 +294,10 @@ void main() {
 
     expect(bridge.lastCountry, 'United States');
     expect(bridge.lastService, 'all');
+    expect(bridge.lastOpenOnly, isFalse);
+    expect(bridge.lastFmOnly, isFalse);
+    expect(preferencesStore.preferences.openOnly, isFalse);
+    expect(preferencesStore.preferences.fmOnly, isFalse);
     expect(find.text('WB2ECR — Buffalo'), findsOneWidget);
     expect(find.text('W4BUG — Point of Americas'), findsOneWidget);
     await tester.ensureVisible(find.text('Map'));
@@ -361,6 +402,100 @@ void main() {
 
     expect(selected, hasLength(1));
     expect(selected!.single.frequency, 444);
+    expect(selected!.single.location, 1);
+  });
+
+  testWidgets('RepeaterBook empty results explain country and filters', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final preferencesStore = _FakeRepeaterSearchPreferencesStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                await showDialog<List<RadioChannel>>(
+                  context: context,
+                  builder: (context) => RepeaterBookDialog(
+                    bridge: _FakeRepeaterBridge(emptyResults: true),
+                    preferencesStore: preferencesStore,
+                  ),
+                );
+              },
+              child: const Text('Open empty repeater search'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open empty repeater search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining(
+        'No matching repeaters were found in New York, United States.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Coordinates do not change Country or Region'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('RepeaterBook restores saved optional filters', (tester) async {
+    tester.view.physicalSize = const Size(1200, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bridge = _FakeRepeaterBridge();
+    final preferencesStore = _FakeRepeaterSearchPreferencesStore(
+      const RepeaterSearchPreferences(openOnly: true, fmOnly: false),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                await showDialog<List<RadioChannel>>(
+                  context: context,
+                  builder: (context) => RepeaterBookDialog(
+                    bridge: bridge,
+                    preferencesStore: preferencesStore,
+                  ),
+                );
+              },
+              child: const Text('Open remembered repeater search'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open remembered repeater search'));
+    await tester.pumpAndSettle();
+    final openOnlyTile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'Open repeaters only'),
+    );
+    final fmOnlyTile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, 'FM-capable only'),
+    );
+    expect(openOnlyTile.value, isTrue);
+    expect(fmOnlyTile.value, isFalse);
+    await tester.tap(find.text('Search'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.lastOpenOnly, isTrue);
+    expect(bridge.lastFmOnly, isFalse);
   });
 
   testWidgets('startup update check offers a newer release', (tester) async {
@@ -389,7 +524,7 @@ void main() {
     expect(find.text('Download and install'), findsNothing);
   });
 
-  testWidgets('startup update downloads, installs, and requests restart', (
+  testWidgets('startup update respects automatic update support', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -398,7 +533,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final installer = _FakeUpdateInstaller();
     var exited = false;
-    final extension = updateArtifactExtension()!;
+    final extension = updateArtifactExtension();
 
     await tester.pumpWidget(
       testApp(
@@ -408,7 +543,7 @@ void main() {
             latestVersion: '9.9.9',
             releaseUrl: 'https://newchirp.net/#download',
             downloadUrl:
-                'https://newchirp.net/downloads/NewChirp-9.9.9$extension',
+                'https://newchirp.net/downloads/NewChirp-9.9.9${extension ?? '.exe'}',
           ),
         ),
         updateInstaller: installer,
@@ -417,6 +552,16 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    if (extension == null) {
+      expect(find.text('Update available'), findsOneWidget);
+      expect(find.text('Open download page'), findsOneWidget);
+      expect(find.text('Download and install'), findsNothing);
+      expect(installer.downloadCount, 0);
+      expect(installer.installCount, 0);
+      expect(exited, isFalse);
+      return;
+    }
 
     expect(find.text('NewChirp 9.9.9 is ready'), findsOneWidget);
     expect(find.text('Download and install'), findsOneWidget);
@@ -797,7 +942,7 @@ void main() {
     expect(find.text('Receive frequency (MHz)'), findsOneWidget);
   });
 
-  testWidgets('editor provides standard DTCS codes without radio metadata', (
+  testWidgets('editor provides standard tones without radio metadata', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1440, 900);
@@ -838,6 +983,23 @@ void main() {
     final values = dtcsButton.items!.map((item) => item.value).toList();
     expect(values, hasLength(standardDtcsCodes.length));
     expect(values, containsAll(['23', '25', '131', '754']));
+
+    tester
+        .widget<DropdownButtonFormField<String>>(dropdown('Tone mode'))
+        .onChanged!('Tone');
+    await tester.pumpAndSettle();
+
+    final toneButton = tester.widget<DropdownButton<String>>(
+      find.descendant(
+        of: dropdown('Transmit tone (Hz)'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is DropdownButton<String>,
+        ),
+      ),
+    );
+    final tones = toneButton.items!.map((item) => item.value).toList();
+    expect(tones, hasLength(standardCtcssTones.length));
+    expect(tones, containsAll(['88.5', '100.0', '254.1']));
   });
 
   testWidgets('channel editor save commits and close cancels unsaved changes', (
