@@ -43,7 +43,7 @@ import 'widgets/reference_page.dart';
 
 const _menuChannel = MethodChannel('newchirp/menu');
 
-const String _newChirpVersion = '1.0.44';
+const String _newChirpVersion = '1.0.45';
 const bool _enableMyGmrsDirectory = true;
 
 bool radioModelSelectionReady(List<String> models, String? model) {
